@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox</title>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'sha256-EN/gDunxwekgeSDCpWqus5CW4XPSptADvp+DPkVhNaY=' 'unsafe-eval'; default-src 'self'">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.addEventListener('message', (event) => {
+        if (event.data.type === 'run') {
+          try {
+            const result = eval(event.data.code);
+            document.getElementById('root').textContent = result || '';
+          } catch (error) {
+            document.getElementById('root').textContent = error.message;
+          }
+        }
+      });
+
+      // Test parent access
+      try {
+        window.parent.alert('Hacked!');
+      } catch (error) {
+        document.getElementById('root').textContent = 'Parent access blocked: ' + error.message;
+      }
+    </script>
+  </body>
+</html>

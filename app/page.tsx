@@ -5,13 +5,18 @@ import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import CodeEditor from '@/components/CodeEditor'
 import ConsoleOutput from '@/components/ConsoleOutput'
+import ConnectionBanner from '@/components/ConnectionBanner'
 import { messageSchema } from '@/lib/messageSchemas'
 import { parse } from '@babel/parser'
+import { retry } from '@/lib/retry'
 
 export default function Home() {
   const { theme, setTheme } = useTheme()
   const [code, setCode] = useState('// Write your JavaScript here')
   const [consoleMessages, setConsoleMessages] = useState<string[]>([])
+  const [isConnected, setIsConnected] = useState(true)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [failedAttempts, setFailedAttempts] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Listen for messages from the iframe
@@ -39,15 +44,42 @@ export default function Home() {
 
   // Execute code when "Run" is clicked
   const runCode = () => {
-    try {
-      // Parse code to catch syntax errors
-      parse(code, { sourceType: 'module', errorRecovery: true })
-      if (iframeRef.current && iframeRef.current.contentWindow) {
-        setConsoleMessages([]) // Clear console before running new code
-        iframeRef.current.contentWindow.postMessage({ type: 'run', code }, '*')
+    const iframe = iframeRef.current
+    if (iframe && iframe.contentWindow) {
+      try {
+        parse(code, { sourceType: 'module', errorRecovery: true })
+        setConsoleMessages([]) // Clear console before sending the message
+        retry(() => {
+          return new Promise((resolve) => {
+            iframe.contentWindow!.postMessage({ type: 'run', code }, '*')
+            setTimeout(() => resolve(true), 100)
+          })
+        })
+          .then(() => {
+            setIsConnected(true)
+            setConnectionError(null)
+            setFailedAttempts(0)
+          })
+          .catch((error) => {
+            setIsConnected(false)
+            setConnectionError(error.message)
+            setFailedAttempts((prev) => prev + 1)
+            setConsoleMessages((prev) => [...prev, `Connection Error: ${error.message}`])
+          })
+      } catch (error) {
+        setConsoleMessages((prev) => [...prev, `Syntax Error: ${error.message}`])
       }
-    } catch (error) {
-      setConsoleMessages((prev) => [...prev, `Syntax Error: ${error.message}`])
+    }
+  }
+
+  // Reconnect by reloading the iframe
+  const reconnect = () => {
+    if (iframeRef.current) {
+      iframeRef.current.src = '/sandbox.html'
+      setIsConnected(true)
+      setConnectionError(null)
+      setFailedAttempts(0)
+      setTimeout(() => runCode(), 500)
     }
   }
 
@@ -63,12 +95,27 @@ export default function Home() {
         <Button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
           Toggle Theme
         </Button>
-        <Button onClick={runCode}>Run</Button>
+        <Button onClick={runCode} disabled={!isConnected}>
+          Run
+        </Button>
       </div>
       {/* Split Screen */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Half: Code Editor */}
         <div className="w-1/2 p-2">
+          {failedAttempts >= 3 && (
+            <div className="mb-2 p-2 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+              <p>Repeated connection failures. Please reload the page.</p>
+              <Button
+                onClick={() => window.location.reload()}
+                size="sm"
+                className="mt-1 bg-yellow-500 hover:bg-yellow-600"
+              >
+                Reload
+              </Button>
+            </div>
+          )}
+          <ConnectionBanner error={connectionError} onRetry={runCode} onReconnect={reconnect} />
           <CodeEditor value={code} onChange={setCode} />
         </div>
         {/* Right Half: Console Output */}

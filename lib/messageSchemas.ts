@@ -6,6 +6,8 @@ export type ConsoleLogMessage = { type: 'consoleLog'; payload: string }
 export type ConsoleWarnMessage = { type: 'consoleWarn'; payload: string }
 export type ConsoleErrorMessage = { type: 'consoleError'; payload: string }
 export type SchemaErrorMessage = { type: 'schemaError'; issues: string }
+export type ResultMessage = { type: 'result'; value: string }
+export type ErrorMessage = { type: 'error'; message: string; stack?: string }
 
 export type Message =
   | RunMessage
@@ -14,6 +16,8 @@ export type Message =
   | ConsoleWarnMessage
   | ConsoleErrorMessage
   | SchemaErrorMessage
+  | ResultMessage
+  | ErrorMessage
 
 const runMessageSchema = z.object({
   type: z.literal('run'),
@@ -45,6 +49,17 @@ const schemaErrorMessageSchema = z.object({
   issues: z.string(),
 })
 
+const resultMessageSchema = z.object({
+  type: z.literal('result'),
+  value: z.string(),
+})
+
+const errorMessageSchema = z.object({
+  type: z.literal('error'),
+  message: z.string(),
+  stack: z.string().optional(),
+})
+
 export const messageSchema = z.union([
   runMessageSchema,
   consoleMessageSchema,
@@ -52,4 +67,6 @@ export const messageSchema = z.union([
   consoleWarnMessageSchema,
   consoleErrorMessageSchema,
   schemaErrorMessageSchema,
+  resultMessageSchema,
+  errorMessageSchema,
 ])

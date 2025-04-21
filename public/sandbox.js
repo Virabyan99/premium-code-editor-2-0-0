@@ -16,7 +16,7 @@ window.onload = function () {
   // Override console methods to send messages to parent
   console.log = function (...args) {
     const payload = args.join(' ')
-    console.info('Sending consoleLog:', payload) // Use native console.info
+    console.info('Sending consoleLog:', payload)
     window.parent.postMessage({ type: 'consoleLog', payload }, '*')
   }
 
@@ -40,13 +40,13 @@ window.onload = function () {
           const result = eval(message.code)
           console.info('Eval result:', result)
           window.parent.postMessage(
-            { type: 'console', payload: String(result || '') },
+            { type: 'result', value: String(result || '') },
             '*'
           )
         } catch (error) {
           console.info('Eval error:', error.message)
           window.parent.postMessage(
-            { type: 'consoleError', payload: error.message },
+            { type: 'error', message: error.message, stack: error.stack },
             '*'
           )
         }

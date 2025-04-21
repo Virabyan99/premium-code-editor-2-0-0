@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import CodeEditor from '@/components/CodeEditor'
 import ConsoleOutput from '@/components/ConsoleOutput'
 import { messageSchema } from '@/lib/messageSchemas'
+import { parse } from '@babel/parser'
 
 export default function Home() {
   const { theme, setTheme } = useTheme()
@@ -20,6 +21,10 @@ export default function Home() {
         const message = messageSchema.parse(event.data)
         if (['console', 'consoleLog', 'consoleWarn', 'consoleError'].includes(message.type)) {
           setConsoleMessages((prev) => [...prev, message.payload])
+        } else if (message.type === 'result') {
+          setConsoleMessages((prev) => [...prev, message.value])
+        } else if (message.type === 'error') {
+          setConsoleMessages((prev) => [...prev, `${message.message}\n${message.stack || ''}`])
         } else if (message.type === 'schemaError') {
           setConsoleMessages((prev) => [...prev, `Schema Error: ${message.issues}`])
         }
@@ -34,9 +39,15 @@ export default function Home() {
 
   // Execute code when "Run" is clicked
   const runCode = () => {
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      setConsoleMessages([]) // Clear console before running new code
-      iframeRef.current.contentWindow.postMessage({ type: 'run', code }, '*')
+    try {
+      // Parse code to catch syntax errors
+      parse(code, { sourceType: 'module', errorRecovery: true })
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        setConsoleMessages([]) // Clear console before running new code
+        iframeRef.current.contentWindow.postMessage({ type: 'run', code }, '*')
+      }
+    } catch (error) {
+      setConsoleMessages((prev) => [...prev, `Syntax Error: ${error.message}`])
     }
   }
 

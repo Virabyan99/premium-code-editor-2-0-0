@@ -35,6 +35,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
     return diagnostics
   })
 
+  // Initialize the editor on mount
   useEffect(() => {
     if (editorRef.current && !viewRef.current) {
       const state = EditorState.create({
@@ -69,6 +70,18 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
       }
     }
   }, [onChange])
+
+  // Sync editor content with value prop changes
+  useEffect(() => {
+    if (viewRef.current) {
+      const currentCode = viewRef.current.state.doc.toString()
+      if (currentCode !== value) {
+        viewRef.current.dispatch({
+          changes: { from: 0, to: currentCode.length, insert: value }
+        })
+      }
+    }
+  }, [value])
 
   return <div ref={editorRef} className="h-full" />
 }

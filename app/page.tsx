@@ -9,6 +9,15 @@ import ConnectionBanner from '@/components/ConnectionBanner'
 import { messageSchema } from '@/lib/messageSchemas'
 import { parse } from '@babel/parser'
 import { retry } from '@/lib/retry'
+import { db, saveSnippet, getSnippets, getSnippet, saveConsoleLog, getConsoleLogs, clearConsoleLogs } from '@/lib/db'
+import { debounce } from 'lodash'
+
+interface Snippet {
+  id?: number;
+  code: string;
+  name: string;
+  createdAt: number;
+}
 
 export default function Home() {
   const { theme, setTheme } = useTheme()
@@ -17,7 +26,35 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(true)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [failedAttempts, setFailedAttempts] = useState(0)
+  const [snippets, setSnippets] = useState<Snippet[]>([])
+  const [snippetName, setSnippetName] = useState('')
   const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  // Load snippets and console logs on mount
+  useEffect(() => {
+    const loadData = async () => {
+      const savedSnippets = await getSnippets()
+      setSnippets(savedSnippets)
+      const savedLogs = await getConsoleLogs()
+      setConsoleMessages(savedLogs.map((log) => log.message))
+      if (savedSnippets.length > 0) {
+        setCode(savedSnippets[0].code) // Load latest snippet
+      }
+    }
+    loadData()
+  }, [])
+
+  // Auto-save code every 5 seconds
+  const autoSave = debounce(async (code: string) => {
+    await saveSnippet(code, 'Auto-Saved')
+    const updatedSnippets = await getSnippets()
+    setSnippets(updatedSnippets)
+  }, 5000)
+
+  useEffect(() => {
+    autoSave(code)
+    return () => autoSave.cancel()
+  }, [code])
 
   // Listen for messages from the iframe
   useEffect(() => {
@@ -25,16 +62,26 @@ export default function Home() {
       try {
         const message = messageSchema.parse(event.data)
         if (['console', 'consoleLog', 'consoleWarn', 'consoleError'].includes(message.type)) {
-          setConsoleMessages((prev) => [...prev, message.payload])
+          const msg = message.payload
+          setConsoleMessages((prev) => [...prev, msg])
+          saveConsoleLog(msg)
         } else if (message.type === 'result') {
-          setConsoleMessages((prev) => [...prev, message.value])
+          const msg = message.value
+          setConsoleMessages((prev) => [...prev, msg])
+          saveConsoleLog(msg)
         } else if (message.type === 'error') {
-          setConsoleMessages((prev) => [...prev, `${message.message}\n${message.stack || ''}`])
+          const msg = `${message.message}\n${message.stack || ''}`
+          setConsoleMessages((prev) => [...prev, msg])
+          saveConsoleLog(msg)
         } else if (message.type === 'schemaError') {
-          setConsoleMessages((prev) => [...prev, `Schema Error: ${message.issues}`])
+          const msg = `Schema Error: ${message.issues}`
+          setConsoleMessages((prev) => [...prev, msg])
+          saveConsoleLog(msg)
         }
       } catch (error) {
-        setConsoleMessages((prev) => [...prev, `Error: ${error.message}`])
+        const msg = `Error: ${error.message}`
+        setConsoleMessages((prev) => [...prev, msg])
+        saveConsoleLog(msg)
       }
     }
   
@@ -65,9 +112,11 @@ export default function Home() {
             setConnectionError(error.message)
             setFailedAttempts((prev) => prev + 1)
             setConsoleMessages((prev) => [...prev, `Connection Error: ${error.message}`])
+            saveConsoleLog(`Connection Error: ${error.message}`)
           })
       } catch (error) {
         setConsoleMessages((prev) => [...prev, `Syntax Error: ${error.message}`])
+        saveConsoleLog(`Syntax Error: ${error.message}`)
       }
     }
   }
@@ -85,6 +134,30 @@ export default function Home() {
 
   // Clear console output
   const clearConsole = () => {
+    setConsoleMessages([])
+  }
+
+  // Save snippet
+  const handleSaveSnippet = async () => {
+    if (snippetName.trim()) {
+      await saveSnippet(code, snippetName)
+      const updatedSnippets = await getSnippets()
+      setSnippets(updatedSnippets)
+      setSnippetName('')
+    }
+  }
+
+  // Load snippet
+  const handleLoadSnippet = async (id: number) => {
+    const snippet = await getSnippet(id)
+    if (snippet) {
+      setCode(snippet.code)
+    }
+  }
+
+  // Clear console log history
+  const handleClearHistory = async () => {
+    await clearConsoleLogs()
     setConsoleMessages([])
   }
 
@@ -116,11 +189,45 @@ export default function Home() {
             </div>
           )}
           <ConnectionBanner error={connectionError} onRetry={runCode} onReconnect={reconnect} />
+          <div className="mt-2 flex space-x-2">
+            <input
+              type="text"
+              value={snippetName}
+              onChange={(e) => setSnippetName(e.target.value)}
+              placeholder="Snippet name"
+              className="p-2 border rounded flex-1"
+            />
+            <Button
+              onClick={handleSaveSnippet}
+              disabled={!snippetName.trim()}
+            >
+              Save Snippet
+            </Button>
+          </div>
+          <div className="mt-2">
+            <select
+              onChange={(e) => handleLoadSnippet(Number(e.target.value))}
+              className="p-2 border rounded w-full"
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Load Snippet
+              </option>
+              {snippets.map((snippet) => (
+                <option key={snippet.id} value={snippet.id}>
+                  {snippet.name} ({new Date(snippet.createdAt).toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </div>
           <CodeEditor value={code} onChange={setCode} />
         </div>
         {/* Right Half: Console Output */}
         <div className="w-1/2 p-2">
           <ConsoleOutput messages={consoleMessages} onClear={clearConsole} />
+          <Button onClick={handleClearHistory} className="mt-2">
+            Clear History
+          </Button>
         </div>
       </div>
       {/* Hidden Iframe for Code Execution */}

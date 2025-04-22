@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import CodeEditor from '@/components/CodeEditor'
@@ -9,25 +9,34 @@ import ConnectionBanner from '@/components/ConnectionBanner'
 import { messageSchema } from '@/lib/messageSchemas'
 import { parse } from '@babel/parser'
 import { retry } from '@/lib/retry'
-import { db, saveSnippet, getSnippets, getSnippet, saveConsoleLog, getConsoleLogs, clearConsoleLogs } from '@/lib/db'
+import { useStore } from '@/lib/store'
+import { getSnippets, getConsoleLogs, saveConsoleLog } from '@/lib/db'
 import { debounce } from 'lodash'
-
-interface Snippet {
-  id?: number;
-  code: string;
-  name: string;
-  createdAt: number;
-}
 
 export default function Home() {
   const { theme, setTheme } = useTheme()
-  const [code, setCode] = useState('// Write your JavaScript here')
-  const [consoleMessages, setConsoleMessages] = useState<string[]>([])
-  const [isConnected, setIsConnected] = useState(true)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [failedAttempts, setFailedAttempts] = useState(0)
-  const [snippets, setSnippets] = useState<Snippet[]>([])
-  const [snippetName, setSnippetName] = useState('')
+  const {
+    code,
+    setCode,
+    consoleMessages,
+    addConsoleMessage,
+    setConsoleMessages,
+    isConnected,
+    setIsConnected,
+    connectionError,
+    setConnectionError,
+    failedAttempts,
+    incrementFailedAttempts,
+    resetFailedAttempts,
+    snippets,
+    setSnippets,
+    snippetName,
+    setSnippetName,
+    saveSnippet,
+    loadSnippet,
+    clearConsoleLogs,
+  } = useStore()
+
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Load snippets and console logs on mount
@@ -38,11 +47,11 @@ export default function Home() {
       const savedLogs = await getConsoleLogs()
       setConsoleMessages(savedLogs.map((log) => log.message))
       if (savedSnippets.length > 0) {
-        setCode(savedSnippets[0].code) // Load latest snippet
+        setCode(savedSnippets[0].code)
       }
     }
     loadData()
-  }, [])
+  }, [setSnippets, setConsoleMessages, setCode])
 
   // Auto-save code every 5 seconds
   const autoSave = debounce(async (code: string) => {
@@ -54,7 +63,7 @@ export default function Home() {
   useEffect(() => {
     autoSave(code)
     return () => autoSave.cancel()
-  }, [code])
+  }, [code, saveSnippet, setSnippets])
 
   // Listen for messages from the iframe
   useEffect(() => {
@@ -63,31 +72,31 @@ export default function Home() {
         const message = messageSchema.parse(event.data)
         if (['console', 'consoleLog', 'consoleWarn', 'consoleError'].includes(message.type)) {
           const msg = message.payload
-          setConsoleMessages((prev) => [...prev, msg])
+          addConsoleMessage(msg)
           saveConsoleLog(msg)
         } else if (message.type === 'result') {
           const msg = message.value
-          setConsoleMessages((prev) => [...prev, msg])
+          addConsoleMessage(msg)
           saveConsoleLog(msg)
         } else if (message.type === 'error') {
           const msg = `${message.message}\n${message.stack || ''}`
-          setConsoleMessages((prev) => [...prev, msg])
+          addConsoleMessage(msg)
           saveConsoleLog(msg)
         } else if (message.type === 'schemaError') {
           const msg = `Schema Error: ${message.issues}`
-          setConsoleMessages((prev) => [...prev, msg])
+          addConsoleMessage(msg)
           saveConsoleLog(msg)
         }
       } catch (error) {
         const msg = `Error: ${error.message}`
-        setConsoleMessages((prev) => [...prev, msg])
+        addConsoleMessage(msg)
         saveConsoleLog(msg)
       }
     }
   
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [addConsoleMessage])
 
   // Execute code when "Run" is clicked
   const runCode = () => {
@@ -95,7 +104,7 @@ export default function Home() {
     if (iframe && iframe.contentWindow) {
       try {
         parse(code, { sourceType: 'module', errorRecovery: true })
-        setConsoleMessages([]) // Clear console before sending the message
+        setConsoleMessages([])
         retry(() => {
           return new Promise((resolve) => {
             iframe.contentWindow!.postMessage({ type: 'run', code }, '*')
@@ -105,17 +114,17 @@ export default function Home() {
           .then(() => {
             setIsConnected(true)
             setConnectionError(null)
-            setFailedAttempts(0)
+            resetFailedAttempts()
           })
           .catch((error) => {
             setIsConnected(false)
             setConnectionError(error.message)
-            setFailedAttempts((prev) => prev + 1)
-            setConsoleMessages((prev) => [...prev, `Connection Error: ${error.message}`])
+            incrementFailedAttempts()
+            addConsoleMessage(`Connection Error: ${error.message}`)
             saveConsoleLog(`Connection Error: ${error.message}`)
           })
       } catch (error) {
-        setConsoleMessages((prev) => [...prev, `Syntax Error: ${error.message}`])
+        addConsoleMessage(`Syntax Error: ${error.message}`)
         saveConsoleLog(`Syntax Error: ${error.message}`)
       }
     }
@@ -127,38 +136,27 @@ export default function Home() {
       iframeRef.current.src = '/sandbox.html'
       setIsConnected(true)
       setConnectionError(null)
-      setFailedAttempts(0)
+      resetFailedAttempts()
       setTimeout(() => runCode(), 500)
     }
-  }
-
-  // Clear console output
-  const clearConsole = () => {
-    setConsoleMessages([])
   }
 
   // Save snippet
   const handleSaveSnippet = async () => {
     if (snippetName.trim()) {
       await saveSnippet(code, snippetName)
-      const updatedSnippets = await getSnippets()
-      setSnippets(updatedSnippets)
       setSnippetName('')
     }
   }
 
   // Load snippet
   const handleLoadSnippet = async (id: number) => {
-    const snippet = await getSnippet(id)
-    if (snippet) {
-      setCode(snippet.code)
-    }
+    await loadSnippet(id)
   }
 
   // Clear console log history
   const handleClearHistory = async () => {
     await clearConsoleLogs()
-    setConsoleMessages([])
   }
 
   return (
@@ -224,7 +222,7 @@ export default function Home() {
         </div>
         {/* Right Half: Console Output */}
         <div className="w-1/2 p-2">
-          <ConsoleOutput messages={consoleMessages} onClear={clearConsole} />
+          <ConsoleOutput messages={consoleMessages} onClear={() => setConsoleMessages([])} />
           <Button onClick={handleClearHistory} className="mt-2">
             Clear History
           </Button>

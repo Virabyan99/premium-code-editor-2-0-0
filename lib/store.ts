@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { saveSnippet, getSnippets, getSnippet, saveConsoleLog, getConsoleLogs, clearConsoleLogs } from '@/lib/db';
+import { saveSnippet, getSnippets, getSnippet, deleteSnippet, saveConsoleLog, getConsoleLogs, clearConsoleLogs } from '@/lib/db';
 
 interface Snippet {
   id?: number;
@@ -32,6 +32,7 @@ interface Actions {
   saveSnippet: (code: string, name: string) => Promise<void>;
   loadSnippet: (id: number) => Promise<void>;
   clearConsoleLogs: () => Promise<void>;
+  deleteSnippet: (id: number) => Promise<void>;
 }
 
 export const useStore = create<State & Actions>((set) => ({
@@ -70,5 +71,11 @@ export const useStore = create<State & Actions>((set) => ({
   clearConsoleLogs: async () => {
     await clearConsoleLogs();
     set({ consoleMessages: [] });
+  },
+
+  deleteSnippet: async (id) => {
+    await deleteSnippet(id);
+    const updatedSnippets = await getSnippets();
+    set({ snippets: updatedSnippets });
   },
 }));

@@ -12,6 +12,7 @@ import { retry } from '@/lib/retry'
 import { useStore } from '@/lib/store'
 import { getSnippets, getConsoleLogs, saveConsoleLog } from '@/lib/db'
 import { debounce } from 'lodash'
+import { IconTrash } from '@tabler/icons-react';
 
 export default function Home() {
   const { theme, setTheme } = useTheme()
@@ -35,11 +36,11 @@ export default function Home() {
     saveSnippet,
     loadSnippet,
     clearConsoleLogs,
+    deleteSnippet,
   } = useStore()
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  // Load snippets and console logs on mount
   useEffect(() => {
     const loadData = async () => {
       const savedSnippets = await getSnippets()
@@ -53,7 +54,6 @@ export default function Home() {
     loadData()
   }, [setSnippets, setConsoleMessages, setCode])
 
-  // Auto-save code every 5 seconds
   const autoSave = debounce(async (code: string) => {
     await saveSnippet(code, 'Auto-Saved')
     const updatedSnippets = await getSnippets()
@@ -65,7 +65,6 @@ export default function Home() {
     return () => autoSave.cancel()
   }, [code, saveSnippet, setSnippets])
 
-  // Listen for messages from the iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       try {
@@ -98,7 +97,6 @@ export default function Home() {
     return () => window.removeEventListener('message', handleMessage)
   }, [addConsoleMessage])
 
-  // Execute code when "Run" is clicked
   const runCode = () => {
     const iframe = iframeRef.current
     if (iframe && iframe.contentWindow) {
@@ -130,7 +128,6 @@ export default function Home() {
     }
   }
 
-  // Reconnect by reloading the iframe
   const reconnect = () => {
     if (iframeRef.current) {
       iframeRef.current.src = '/sandbox.html'
@@ -141,7 +138,6 @@ export default function Home() {
     }
   }
 
-  // Save snippet
   const handleSaveSnippet = async () => {
     if (snippetName.trim()) {
       await saveSnippet(code, snippetName)
@@ -149,19 +145,16 @@ export default function Home() {
     }
   }
 
-  // Load snippet
   const handleLoadSnippet = async (id: number) => {
     await loadSnippet(id)
   }
 
-  // Clear console log history
   const handleClearHistory = async () => {
     await clearConsoleLogs()
   }
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Top Bar */}
       <div className="flex justify-between p-2 border-b">
         <Button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
           Toggle Theme
@@ -170,9 +163,7 @@ export default function Home() {
           Run
         </Button>
       </div>
-      {/* Split Screen */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Half: Code Editor */}
         <div className="w-1/2 p-2">
           {failedAttempts >= 3 && (
             <div className="mb-2 p-2 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
@@ -203,24 +194,25 @@ export default function Home() {
             </Button>
           </div>
           <div className="mt-2">
-            <select
-              onChange={(e) => handleLoadSnippet(Number(e.target.value))}
-              className="p-2 border rounded w-full"
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Load Snippet
-              </option>
+            <ul className="border rounded">
               {snippets.map((snippet) => (
-                <option key={snippet.id} value={snippet.id}>
-                  {snippet.name} ({new Date(snippet.createdAt).toLocaleString()})
-                </option>
+                <li key={snippet.id} className="flex justify-between items-center p-2 border-b last:border-b-0">
+                  <span onClick={() => loadSnippet(snippet.id)} className="cursor-pointer">
+                    {snippet.name} ({new Date(snippet.createdAt).toLocaleString()})
+                  </span>
+                  <Button
+                    onClick={async () => await deleteSnippet(snippet.id)}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    <IconTrash size={16} />
+                  </Button>
+                </li>
               ))}
-            </select>
+            </ul>
           </div>
           <CodeEditor value={code} onChange={setCode} />
         </div>
-        {/* Right Half: Console Output */}
         <div className="w-1/2 p-2">
           <ConsoleOutput messages={consoleMessages} onClear={() => setConsoleMessages([])} />
           <Button onClick={handleClearHistory} className="mt-2">
@@ -228,7 +220,6 @@ export default function Home() {
           </Button>
         </div>
       </div>
-      {/* Hidden Iframe for Code Execution */}
       <iframe
         ref={iframeRef}
         sandbox="allow-scripts"

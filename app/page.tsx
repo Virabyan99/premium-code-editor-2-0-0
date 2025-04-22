@@ -1,8 +1,6 @@
 "use client"
 
 import { useRef, useEffect } from 'react'
-import { useTheme } from 'next-themes'
-import { Button } from '@/components/ui/button'
 import CodeEditor from '@/components/CodeEditor'
 import ConsoleOutput from '@/components/ConsoleOutput'
 import ConnectionBanner from '@/components/ConnectionBanner'
@@ -10,12 +8,10 @@ import { messageSchema } from '@/lib/messageSchemas'
 import { parse } from '@babel/parser'
 import { retry } from '@/lib/retry'
 import { useStore } from '@/lib/store'
-import { getSnippets, getConsoleLogs, saveConsoleLog } from '@/lib/db'
+import { getSnippets, getConsoleLogs, saveConsoleLog, db } from '@/lib/db'
 import { debounce } from 'lodash'
-import { IconTrash } from '@tabler/icons-react';
 
 export default function Home() {
-  const { theme, setTheme } = useTheme()
   const {
     code,
     setCode,
@@ -31,12 +27,8 @@ export default function Home() {
     resetFailedAttempts,
     snippets,
     setSnippets,
-    snippetName,
-    setSnippetName,
-    saveSnippet,
-    loadSnippet,
-    clearConsoleLogs,
-    deleteSnippet,
+    shouldRunCode,
+    setShouldRunCode,
   } = useStore()
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -55,15 +47,24 @@ export default function Home() {
   }, [setSnippets, setConsoleMessages, setCode])
 
   const autoSave = debounce(async (code: string) => {
-    await saveSnippet(code, 'Auto-Saved')
     const updatedSnippets = await getSnippets()
-    setSnippets(updatedSnippets)
+    const autoSavedExists = updatedSnippets.some(s => s.name === 'Auto-Saved')
+    if (!autoSavedExists && code.trim()) {
+      await db.snippets.add({ code, name: 'Auto-Saved', createdAt: Date.now() })
+    } else if (autoSavedExists && code.trim()) {
+      const autoSavedSnippet = updatedSnippets.find(s => s.name === 'Auto-Saved')
+      if (autoSavedSnippet) {
+        await db.snippets.update(autoSavedSnippet.id!, { code, createdAt: Date.now() })
+      }
+    }
+    const refreshedSnippets = await getSnippets()
+    setSnippets(refreshedSnippets)
   }, 5000)
 
   useEffect(() => {
     autoSave(code)
     return () => autoSave.cancel()
-  }, [code, saveSnippet, setSnippets])
+  }, [code])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -87,7 +88,7 @@ export default function Home() {
           saveConsoleLog(msg)
         }
       } catch (error) {
-        const msg = `Error: ${error.message}`
+        const msg = `Error: ${error instanceof Error ? error.message : String(error)}`
         addConsoleMessage(msg)
         saveConsoleLog(msg)
       }
@@ -122,11 +123,18 @@ export default function Home() {
             saveConsoleLog(`Connection Error: ${error.message}`)
           })
       } catch (error) {
-        addConsoleMessage(`Syntax Error: ${error.message}`)
-        saveConsoleLog(`Syntax Error: ${error.message}`)
+        addConsoleMessage(`Syntax Error: ${error instanceof Error ? error.message : String(error)}`)
+        saveConsoleLog(`Syntax Error: ${error instanceof Error ? error.message : String(error)}`)
       }
     }
   }
+
+  useEffect(() => {
+    if (shouldRunCode) {
+      runCode()
+      setShouldRunCode(false)
+    }
+  }, [shouldRunCode, runCode, setShouldRunCode])
 
   const reconnect = () => {
     if (iframeRef.current) {
@@ -138,86 +146,26 @@ export default function Home() {
     }
   }
 
-  const handleSaveSnippet = async () => {
-    if (snippetName.trim()) {
-      await saveSnippet(code, snippetName)
-      setSnippetName('')
-    }
-  }
-
-  const handleLoadSnippet = async (id: number) => {
-    await loadSnippet(id)
-  }
-
-  const handleClearHistory = async () => {
-    await clearConsoleLogs()
-  }
-
   return (
     <div className="flex flex-col h-screen">
-      <div className="flex justify-between p-2 border-b">
-        <Button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          Toggle Theme
-        </Button>
-        <Button onClick={runCode} disabled={!isConnected}>
-          Run
-        </Button>
-      </div>
       <div className="flex flex-1 overflow-hidden">
         <div className="w-1/2 p-2">
           {failedAttempts >= 3 && (
             <div className="mb-2 p-2 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
               <p>Repeated connection failures. Please reload the page.</p>
-              <Button
+              <button
                 onClick={() => window.location.reload()}
-                size="sm"
-                className="mt-1 bg-yellow-500 hover:bg-yellow-600"
+                className="mt-1 bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-sm"
               >
                 Reload
-              </Button>
+              </button>
             </div>
           )}
           <ConnectionBanner error={connectionError} onRetry={runCode} onReconnect={reconnect} />
-          <div className="mt-2 flex space-x-2">
-            <input
-              type="text"
-              value={snippetName}
-              onChange={(e) => setSnippetName(e.target.value)}
-              placeholder="Snippet name"
-              className="p-2 border rounded flex-1"
-            />
-            <Button
-              onClick={handleSaveSnippet}
-              disabled={!snippetName.trim()}
-            >
-              Save Snippet
-            </Button>
-          </div>
-          <div className="mt-2">
-            <ul className="border rounded">
-              {snippets.map((snippet) => (
-                <li key={snippet.id} className="flex justify-between items-center p-2 border-b last:border-b-0">
-                  <span onClick={() => loadSnippet(snippet.id)} className="cursor-pointer">
-                    {snippet.name} ({new Date(snippet.createdAt).toLocaleString()})
-                  </span>
-                  <Button
-                    onClick={async () => await deleteSnippet(snippet.id)}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    <IconTrash size={16} />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
           <CodeEditor value={code} onChange={setCode} />
         </div>
         <div className="w-1/2 p-2">
           <ConsoleOutput messages={consoleMessages} onClear={() => setConsoleMessages([])} />
-          <Button onClick={handleClearHistory} className="mt-2">
-            Clear History
-          </Button>
         </div>
       </div>
       <iframe

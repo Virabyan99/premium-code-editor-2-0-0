@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { saveSnippet, getSnippets, getSnippet, deleteSnippet, saveConsoleLog, getConsoleLogs, clearConsoleLogs } from '@/lib/db';
+import { saveSnippet as dbSaveSnippet, getSnippets, getSnippet, deleteSnippet, saveConsoleLog, getConsoleLogs, clearConsoleLogs } from '@/lib/db';
 
 interface Snippet {
   id?: number;
@@ -16,6 +16,7 @@ interface State {
   failedAttempts: number;
   snippets: Snippet[];
   snippetName: string;
+  shouldRunCode: boolean;
 }
 
 interface Actions {
@@ -33,6 +34,7 @@ interface Actions {
   loadSnippet: (id: number) => Promise<void>;
   clearConsoleLogs: () => Promise<void>;
   deleteSnippet: (id: number) => Promise<void>;
+  setShouldRunCode: (value: boolean) => void;
 }
 
 export const useStore = create<State & Actions>((set) => ({
@@ -43,6 +45,7 @@ export const useStore = create<State & Actions>((set) => ({
   failedAttempts: 0,
   snippets: [],
   snippetName: '',
+  shouldRunCode: false,
 
   setCode: (code) => set({ code }),
   addConsoleMessage: (message) => set((state) => ({ consoleMessages: [...state.consoleMessages, message] })),
@@ -54,9 +57,10 @@ export const useStore = create<State & Actions>((set) => ({
   resetFailedAttempts: () => set({ failedAttempts: 0 }),
   setSnippets: (snippets) => set({ snippets }),
   setSnippetName: (name) => set({ snippetName: name }),
+  setShouldRunCode: (value) => set({ shouldRunCode: value }),
 
   saveSnippet: async (code, name) => {
-    await saveSnippet(code, name);
+    await dbSaveSnippet(code, name);
     const updatedSnippets = await getSnippets();
     set({ snippets: updatedSnippets });
   },

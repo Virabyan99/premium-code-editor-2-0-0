@@ -39,7 +39,7 @@ const ConsoleOutput = () => {
 
   return (
     <div ref={consoleRef} className="relative h-full p-2 bg-gray-100 dark:bg-gray-800 border rounded overflow-auto">
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex justify-end items-center mb-2">
         <Button onClick={clearConsoleLogs} variant="ghost" size="sm">
           <IconTrash size={16} />
         </Button>

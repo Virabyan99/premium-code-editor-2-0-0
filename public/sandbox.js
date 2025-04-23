@@ -13,23 +13,20 @@ window.onload = function () {
 
   const messageSchema = z.union([runMessageSchema])
 
-  // Override console methods to send messages to parent
+  // Override console methods to send unified 'console' messages
   console.log = function (...args) {
     const payload = args.join(' ')
-    console.info('Sending consoleLog:', payload)
-    window.parent.postMessage({ type: 'consoleLog', payload }, '*')
+    window.parent.postMessage({ type: 'console', payload, method: 'log' }, '*')
   }
 
   console.warn = function (...args) {
     const payload = args.join(' ')
-    console.info('Sending consoleWarn:', payload)
-    window.parent.postMessage({ type: 'consoleWarn', payload }, '*')
+    window.parent.postMessage({ type: 'console', payload, method: 'warn' }, '*')
   }
 
   console.error = function (...args) {
     const payload = args.join(' ')
-    console.info('Sending consoleError:', payload)
-    window.parent.postMessage({ type: 'consoleError', payload }, '*')
+    window.parent.postMessage({ type: 'console', payload, method: 'error' }, '*')
   }
 
   window.addEventListener('message', (event) => {
@@ -38,13 +35,11 @@ window.onload = function () {
       if (message.type === 'run') {
         try {
           const result = eval(message.code)
-          console.info('Eval result:', result)
           window.parent.postMessage(
             { type: 'result', value: String(result || '') },
             '*'
           )
         } catch (error) {
-          console.info('Eval error:', error.message)
           window.parent.postMessage(
             { type: 'error', message: error.message, stack: error.stack },
             '*'

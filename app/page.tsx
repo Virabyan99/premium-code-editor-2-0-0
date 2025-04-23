@@ -35,16 +35,30 @@ export default function Home() {
 
   useEffect(() => {
     const loadData = async () => {
-      const savedSnippets = await getSnippets()
-      setSnippets(savedSnippets)
-      const savedLogs = await getConsoleLogs()
-      setConsoleMessages(savedLogs.map((log) => log.message))
+      const savedSnippets = await getSnippets();
+      setSnippets(savedSnippets);
+      const savedLogs = await getConsoleLogs();
+      setConsoleMessages(
+        savedLogs.map((log) => {
+          try {
+            // Attempt to parse log.message as JSON
+            const parsed = JSON.parse(log.message);
+            // Check if parsed result is an object with message and type
+            if (typeof parsed === 'object' && parsed.message && parsed.type) {
+              return parsed; // Return the parsed object (new format)
+            }
+          } catch {
+            // If parsing fails, treat it as a plain string with default type 'log'
+            return { message: log.message, type: 'log' };
+          }
+        })
+      );
       if (savedSnippets.length > 0) {
-        setCode(savedSnippets[0].code)
+        setCode(savedSnippets[0].code);
       }
-    }
-    loadData()
-  }, [setSnippets, setConsoleMessages, setCode])
+    };
+    loadData();
+  }, [setSnippets, setConsoleMessages, setCode]);
 
   const autoSave = debounce(async (code: string) => {
     const updatedSnippets = await getSnippets()
@@ -70,30 +84,30 @@ export default function Home() {
     const handleMessage = (event: MessageEvent) => {
       try {
         const message = messageSchema.parse(event.data)
-        if (['console', 'consoleLog', 'consoleWarn', 'consoleError'].includes(message.type)) {
-          const msg = message.payload
+        if (message.type === 'console') {
+          const msg = { message: message.payload, type: message.method }
           addConsoleMessage(msg)
-          saveConsoleLog(msg)
+          saveConsoleLog(JSON.stringify(msg)) // Store as JSON to preserve type
         } else if (message.type === 'result') {
-          const msg = message.value
+          const msg = { message: message.value, type: 'result' }
           addConsoleMessage(msg)
-          saveConsoleLog(msg)
+          saveConsoleLog(JSON.stringify(msg))
         } else if (message.type === 'error') {
-          const msg = `${message.message}\n${message.stack || ''}`
+          const msg = { message: `${message.message}\n${message.stack || ''}`, type: 'error' }
           addConsoleMessage(msg)
-          saveConsoleLog(msg)
+          saveConsoleLog(JSON.stringify(msg))
         } else if (message.type === 'schemaError') {
-          const msg = `Schema Error: ${message.issues}`
+          const msg = { message: `Schema Error: ${message.issues}`, type: 'error' }
           addConsoleMessage(msg)
-          saveConsoleLog(msg)
+          saveConsoleLog(JSON.stringify(msg))
         }
       } catch (error) {
-        const msg = `Error: ${error instanceof Error ? error.message : String(error)}`
+        const msg = { message: `Error: ${error instanceof Error ? error.message : String(error)}`, type: 'error' }
         addConsoleMessage(msg)
-        saveConsoleLog(msg)
+        saveConsoleLog(JSON.stringify(msg))
       }
     }
-  
+
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [addConsoleMessage])
@@ -119,12 +133,13 @@ export default function Home() {
             setIsConnected(false)
             setConnectionError(error.message)
             incrementFailedAttempts()
-            addConsoleMessage(`Connection Error: ${error.message}`)
-            saveConsoleLog(`Connection Error: ${error.message}`)
+            addConsoleMessage({ message: `Connection Error: ${error.message}`, type: 'error' })
+            saveConsoleLog(JSON.stringify({ message: `Connection Error: ${error.message}`, type: 'error' }))
           })
       } catch (error) {
-        addConsoleMessage(`Syntax Error: ${error instanceof Error ? error.message : String(error)}`)
-        saveConsoleLog(`Syntax Error: ${error instanceof Error ? error.message : String(error)}`)
+        const msg = { message: `Syntax Error: ${error instanceof Error ? error.message : String(error)}`, type: 'error' }
+        addConsoleMessage(msg)
+        saveConsoleLog(JSON.stringify(msg))
       }
     }
   }

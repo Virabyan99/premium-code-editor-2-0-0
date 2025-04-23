@@ -29,6 +29,7 @@ export default function Home() {
     setSnippets,
     shouldRunCode,
     setShouldRunCode,
+    clearConsoleLogs, // Added from store
   } = useStore()
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -181,7 +182,7 @@ export default function Home() {
           <CodeEditor value={code} onChange={setCode} />
         </div>
         <div className="w-1/2 p-2">
-          <ConsoleOutput messages={consoleMessages} onClear={() => setConsoleMessages([])} />
+          <ConsoleOutput messages={consoleMessages} onClear={clearConsoleLogs} />
         </div>
       </div>
       <iframe

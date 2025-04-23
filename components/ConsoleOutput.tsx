@@ -28,7 +28,7 @@ const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ messages, onClear }) => {
         </p>
       )}
       {messages.map((msg, index) => (
-        <div key={index} className="text-sm mb-1 mt-4 flex items-start">
+        <div key={index} className="text-sm mb-1  flex items-start">
           <pre className="whitespace-pre-wrap flex-1">{msg}</pre>
           {(msg.includes('Error:') || msg.includes('Syntax Error')) && (
             <Button

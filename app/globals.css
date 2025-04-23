@@ -117,34 +117,76 @@
   border: 1px solid #ddd;
 }
 
-.cm-scroller {
-  overflow: auto;
-}
-
-.light .cm-editor {
-  background-color: #ffffff;
-  color: #000000;
-}
-
-.dark .cm-editor {
-  background-color: #1a1a1a;
-  color: #ffffff;
-}
-
-.light .cm-content {
-  caret-color: #000000;
-}
-
-.dark .cm-content {
-  caret-color: #ffffff;
+.cm-editor {
+  height: 100%;
+  border: none; /* Remove border to match example */
 }
 
 .cm-content {
+  height: 100%; /* Ensure content fills editor */
   padding: 0.5rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Add subtle shadow like example */
 }
 
 .cm-line {
+  font-family: var(--font-mono); /* Use your mono font */
   padding: 0 0.5rem;
+}
+
+/* Gutter styles for light and dark modes */
+.cm-editor .cm-gutter {
+  background: #f3f4f6; /* Light mode */
+}
+
+.dark .cm-editor .cm-gutter {
+  background: #364153; /* Dark mode */
+}
+
+.cm-gutters {
+  border-right: none !important; /* Remove gutter border */
+}
+
+/* Scrollbar styles */
+.cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.cm-scroller::-webkit-scrollbar-thumb {
+  background-color: #d1d5dc; /* Light mode */
+  border-radius: 4px;
+}
+
+.dark .cm-scroller::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 100, 100, 0.5); /* Dark mode */
+}
+
+.cm-scroller::-webkit-scrollbar-track {
+  background-color: #f3f4f6; /* Light mode */
+  border-radius: 8px;
+  margin: 8px;
+}
+
+.dark .cm-scroller::-webkit-scrollbar-track {
+  background-color: #364153; /* Dark mode */
+}
+
+.cm-fade-in {
+  animation: fadeIn 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cm-editor .cm-cursor {
+  animation: pulse 0.5s ease-out;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; transform: scale(1.5); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 @layer base {

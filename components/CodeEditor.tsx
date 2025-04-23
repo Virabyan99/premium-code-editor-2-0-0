@@ -8,6 +8,7 @@ import { bracketMatching, indentUnit } from '@codemirror/language'
 import { linter, lintGutter } from '@codemirror/lint'
 import { keymap } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
+import { fadeInExtension, addFadeIn } from '@/lib/fadeInExtension'
 
 interface CodeEditorProps {
   value: string
@@ -38,9 +39,19 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
   // Initialize the editor on mount
   useEffect(() => {
     if (editorRef.current && !viewRef.current) {
+      const editorTheme = EditorView.theme({
+        '&': {
+          fontFamily: 'var(--font-mono), monospace',
+          fontFeatureSettings: '"liga" 1',
+          spellCheck: 'false',
+          '-webkit-font-smoothing': 'antialiased',
+        },
+      })
+
       const state = EditorState.create({
         doc: value,
         extensions: [
+          editorTheme, // Add custom theme for styling consistency
           lineNumbers(),
           highlightActiveLine(),
           javascript(),
@@ -48,11 +59,27 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
           indentUnit.of('  '),
           lintGutter(),
           todoLinter,
-          keymap.of(defaultKeymap), // Adds default keybindings, including Enter
-          EditorView.lineWrapping, // Enables line wrapping to prevent overflow
+          keymap.of(defaultKeymap),
+          EditorView.lineWrapping,
+          fadeInExtension, // Add fade-in extension
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               onChange(update.state.doc.toString())
+            }
+          }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              const changes = []
+              update.changes.iterChanges((fromA, toA, fromB, toB) => {
+                if (fromB !== toB) {
+                  changes.push({ from: fromB, to: toB })
+                }
+              })
+              if (changes.length > 0) {
+                update.view.dispatch({
+                  effects: changes.map((change) => addFadeIn.of(change)),
+                })
+              }
             }
           }),
         ],

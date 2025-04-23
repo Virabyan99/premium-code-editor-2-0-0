@@ -64,30 +64,23 @@ const ConsoleOutput = () => {
                 <table className="border-collapse border border-gray-300 w-full">
                   <thead>
                     <tr>
-                      <th className="border border-gray-300 p-1">age</th>
-                      <th className="border border-gray-300 p-1">name</th>
+                      {entry.message.headers.map((header, i) => (
+                        <th key={i} className="border border-gray-300 p-1">
+                          {header}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {entry.message.rows.map((row, i) => {
-                      try {
-                        const obj = JSON.parse(row[1]); // Parse the stringified object from the 'Value' column
-                        return (
-                          <tr key={i}>
-                            <td className="border border-gray-300 p-1">{String(obj.age || 'N/A')}</td>
-                            <td className="border border-gray-300 p-1">{String(obj.name || 'N/A')}</td>
-                          </tr>
-                        );
-                      } catch (e) {
-                        return (
-                          <tr key={i}>
-                            <td colSpan={2} className="border border-gray-300 p-1 text-red-600">
-                              Invalid data
-                            </td>
-                          </tr>
-                        );
-                      }
-                    })}
+                    {entry.message.rows.map((row, i) => (
+                      <tr key={i}>
+                        {row.map((cell, j) => (
+                          <td key={j} className="border border-gray-300 p-1">
+                            {String(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}

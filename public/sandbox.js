@@ -26,26 +26,79 @@ window.onload = function () {
       .join(' ');
   }
 
-  // Utility to serialize table data
+  // Utility to serialize table data dynamically
   function serializeTable(data, columns) {
     if (!data || typeof data !== 'object') {
       return { headers: ['Value'], rows: [[String(data)]] };
     }
 
-    const headers = columns || (Array.isArray(data) ? ['Index', 'Value'] : Object.keys(data));
-    const rows = [];
-
     if (Array.isArray(data)) {
-      data.forEach((item, index) => {
-        rows.push([String(index), typeof item === 'object' ? JSON.stringify(item) : String(item)]);
-      });
-    } else {
-      Object.entries(data).forEach(([key, value]) => {
-        rows.push([key, typeof value === 'object' ? JSON.stringify(value) : String(value)]);
-      });
-    }
+      if (data.length === 0) {
+        return { headers: [], rows: [] };
+      }
 
-    return { headers, rows };
+      if (typeof data[0] === 'object' && !Array.isArray(data[0])) {
+        // Array of objects
+        const allKeys = new Set();
+        data.forEach((obj) => {
+          if (obj && typeof obj === 'object') {
+            Object.keys(obj).forEach((key) => allKeys.add(key));
+          }
+        });
+        const headers = columns || Array.from(allKeys);
+        const rows = data.map((obj, index) => {
+          const row = [String(index)];
+          headers.forEach((header) => {
+            const value = obj && obj[header] !== undefined ? obj[header] : 'N/A';
+            row.push(typeof value === 'object' ? JSON.stringify(value) : String(value));
+          });
+          return row;
+        });
+        return { headers: ['(index)', ...headers], rows };
+      } else {
+        // Array of primitives or mixed types
+        const headers = columns || ['Index', 'Value'];
+        const rows = data.map((item, index) => [
+          String(index),
+          typeof item === 'object' ? JSON.stringify(item) : String(item),
+        ]);
+        return { headers, rows };
+      }
+    } else {
+      // Object
+      const keys = Object.keys(data);
+      if (keys.length === 0) {
+        return { headers: [], rows: [] };
+      }
+
+      if (typeof data[keys[0]] === 'object' && !Array.isArray(data[keys[0]])) {
+        // Object of objects
+        const allSubKeys = new Set();
+        keys.forEach((key) => {
+          if (data[key] && typeof data[key] === 'object') {
+            Object.keys(data[key]).forEach((subKey) => allSubKeys.add(subKey));
+          }
+        });
+        const subHeaders = columns || Array.from(allSubKeys);
+        const rows = keys.map((key) => {
+          const row = [key];
+          subHeaders.forEach((header) => {
+            const value = data[key] && data[key][header] !== undefined ? data[key][header] : 'N/A';
+            row.push(typeof value === 'object' ? JSON.stringify(value) : String(value));
+          });
+          return row;
+        });
+        return { headers: ['(index)', ...subHeaders], rows };
+      } else {
+        // Object of primitives
+        const headers = columns || ['Key', 'Value'];
+        const rows = Object.entries(data).map(([key, value]) => [
+          key,
+          typeof value === 'object' ? JSON.stringify(value) : String(value),
+        ]);
+        return { headers, rows };
+      }
+    }
   }
 
   // Track group depth and timers

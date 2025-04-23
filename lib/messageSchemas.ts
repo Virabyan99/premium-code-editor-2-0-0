@@ -3,8 +3,26 @@ import { z } from 'zod';
 export type RunMessage = { type: 'run'; code: string };
 export type ConsoleMessage = {
   type: 'console';
-  payload: string | { headers: string[]; rows: any[][] } | { label: string; duration: number };
-  method: 'log' | 'warn' | 'error' | 'table' | 'group' | 'groupEnd' | 'time' | 'timeEnd' | 'clear';
+  payload:
+    | string
+    | { headers: string[]; rows: any[][] }
+    | { label: string; duration: number }
+    | { label: string; count: number };
+  method:
+    | 'log'
+    | 'warn'
+    | 'error'
+    | 'table'
+    | 'group'
+    | 'groupEnd'
+    | 'time'
+    | 'timeEnd'
+    | 'clear'
+    | 'info'
+    | 'debug'
+    | 'trace'
+    | 'assert'
+    | 'count';
   groupDepth: number;
 };
 export type SchemaErrorMessage = { type: 'schemaError'; issues: string };
@@ -29,8 +47,24 @@ const consoleMessageSchema = z.object({
     z.string(),
     z.object({ headers: z.array(z.string()), rows: z.array(z.array(z.any())) }),
     z.object({ label: z.string(), duration: z.number() }),
+    z.object({ label: z.string(), count: z.number() }),
   ]),
-  method: z.enum(['log', 'warn', 'error', 'table', 'group', 'groupEnd', 'time', 'timeEnd', 'clear']),
+  method: z.enum([
+    'log',
+    'warn',
+    'error',
+    'table',
+    'group',
+    'groupEnd',
+    'time',
+    'timeEnd',
+    'clear',
+    'info',
+    'debug',
+    'trace',
+    'assert',
+    'count',
+  ]),
   groupDepth: z.number(),
 });
 

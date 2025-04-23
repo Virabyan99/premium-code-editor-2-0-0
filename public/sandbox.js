@@ -101,9 +101,10 @@ window.onload = function () {
     }
   }
 
-  // Track group depth and timers
+  // Track group depth, timers, and counters
   let groupDepth = 0;
   const timers = new Map();
+  const counters = new Map();
 
   // Override console methods
   const originalConsole = {
@@ -116,6 +117,11 @@ window.onload = function () {
     time: console.time,
     timeEnd: console.timeEnd,
     clear: console.clear,
+    info: console.info,
+    debug: console.debug,
+    trace: console.trace,
+    assert: console.assert,
+    count: console.count,
   };
 
   console.log = function (...args) {
@@ -174,6 +180,41 @@ window.onload = function () {
   console.clear = function () {
     window.parent.postMessage({ type: 'console', payload: '', method: 'clear', groupDepth }, '*');
     originalConsole.clear();
+  };
+
+  console.info = function (...args) {
+    const payload = serializeArgs(args);
+    window.parent.postMessage({ type: 'console', payload, method: 'info', groupDepth }, '*');
+    originalConsole.info(...args);
+  };
+
+  console.debug = function (...args) {
+    const payload = serializeArgs(args);
+    window.parent.postMessage({ type: 'console', payload, method: 'debug', groupDepth }, '*');
+    originalConsole.debug(...args);
+  };
+
+  console.trace = function (...args) {
+    const err = new Error();
+    const stack = err.stack?.split('\n').slice(1).join('\n') || 'No stack trace';
+    const message = serializeArgs(args) + '\n' + stack;
+    window.parent.postMessage({ type: 'console', payload: message, method: 'trace', groupDepth }, '*');
+    originalConsole.trace(...args);
+  };
+
+  console.assert = function (assertion, ...args) {
+    if (!assertion) {
+      const msg = args.length ? serializeArgs(args) : 'Assertion failed';
+      window.parent.postMessage({ type: 'console', payload: msg, method: 'assert', groupDepth }, '*');
+      originalConsole.assert(assertion, ...args);
+    }
+  };
+
+  console.count = function (label = 'default') {
+    const count = (counters.get(label) || 0) + 1;
+    counters.set(label, count);
+    window.parent.postMessage({ type: 'console', payload: { label, count }, method: 'count', groupDepth }, '*');
+    originalConsole.count(label);
   };
 
   window.addEventListener('message', (event) => {

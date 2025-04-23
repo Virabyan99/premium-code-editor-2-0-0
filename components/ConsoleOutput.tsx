@@ -92,6 +92,23 @@ const ConsoleOutput = () => {
                   </pre>
                 </div>
               )}
+              {entry.type === 'info' && (
+                <pre className="whitespace-pre-wrap text-blue-600">{typeof entry.message === 'string' ? entry.message : ''}</pre>
+              )}
+              {entry.type === 'debug' && (
+                <pre className="whitespace-pre-wrap text-gray-600">{typeof entry.message === 'string' ? entry.message : ''}</pre>
+              )}
+              {entry.type === 'trace' && (
+                <pre className="whitespace-pre-wrap text-purple-600">{typeof entry.message === 'string' ? entry.message : ''}</pre>
+              )}
+              {entry.type === 'assert' && (
+                <pre className="whitespace-pre-wrap text-red-600">{typeof entry.message === 'string' ? entry.message : ''}</pre>
+              )}
+              {entry.type === 'count' && typeof entry.message !== 'string' && (
+                <pre className="whitespace-pre-wrap text-green-700">
+                  {entry.message.label}: {entry.message.count}
+                </pre>
+              )}
               {(entry.type === 'log' || entry.type === 'warn' || entry.type === 'error') && (
                 <pre
                   className={`whitespace-pre-wrap ${

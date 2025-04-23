@@ -10,8 +10,27 @@ interface Snippet {
 
 export interface ConsoleEntry {
   id: number;
-  message: string | { headers: string[]; rows: any[][] } | { label: string; duration: number };
-  type: 'log' | 'warn' | 'error' | 'table' | 'group' | 'groupEnd' | 'time' | 'timeEnd' | 'result';
+  message:
+    | string
+    | { headers: string[]; rows: any[][] }
+    | { label: string; duration: number }
+    | { label: string; count: number };
+  type:
+    | 'log'
+    | 'warn'
+    | 'error'
+    | 'table'
+    | 'group'
+    | 'groupEnd'
+    | 'time'
+    | 'timeEnd'
+    | 'result'
+    | 'clear'
+    | 'info'
+    | 'debug'
+    | 'trace'
+    | 'assert'
+    | 'count';
   groupDepth: number;
 }
 
@@ -30,7 +49,7 @@ interface State {
 interface Actions {
   setCode: (code: string) => void;
   addConsoleMessage: (
-    message: string | { headers: string[]; rows: any[][] } | { label: string; duration: number },
+    message: ConsoleEntry['message'],
     type: ConsoleEntry['type'],
     groupDepth: number
   ) => void;

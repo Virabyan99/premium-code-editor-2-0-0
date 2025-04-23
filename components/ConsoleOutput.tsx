@@ -3,35 +3,32 @@ import { Button } from '@/components/ui/button';
 import { IconTrash, IconCopy } from '@tabler/icons-react';
 import { useStore } from '@/lib/store';
 
-const ConsoleOutput: React.FC = () => {
+const ConsoleOutput = () => {
   const { consoleMessages, collapsedGroups, toggleGroupCollapse, clearConsoleLogs } = useStore();
-  const consoleRef = useRef<HTMLDivElement>(null);
+  const consoleRef = useRef(null);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
 
   const filteredMessages = showErrorsOnly
     ? consoleMessages.filter((entry) => entry.type === 'error')
     : consoleMessages;
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
   };
 
-  const isGroupCollapsed = (entryIndex: number) => {
+  const isInsideCollapsedGroup = (entryIndex) => {
     let depth = 0;
     for (let i = entryIndex; i >= 0; i--) {
       if (consoleMessages[i].type === 'group') {
-        if (collapsedGroups.has(consoleMessages[i].id)) return true;
         depth++;
-      } else if (consoleMessages[i].type === 'groupEnd' && depth > 0) {
+        if (collapsedGroups.has(consoleMessages[i].id)) {
+          return depth;
+        }
+      } else if (consoleMessages[i].type === 'groupEnd') {
         depth--;
       }
     }
-    return false;
-  };
-
-  const collapseAllGroups = () => {
-    const newCollapsed = new Set(consoleMessages.filter((entry) => entry.type === 'group').map((entry) => entry.id));
-    useStore.setState({ collapsedGroups: newCollapsed });
+    return 0;
   };
 
   useEffect(() => {
@@ -43,9 +40,6 @@ const ConsoleOutput: React.FC = () => {
   return (
     <div ref={consoleRef} className="relative h-full p-2 bg-gray-100 dark:bg-gray-800 border rounded overflow-auto">
       <div className="flex justify-between items-center mb-2">
-        <Button onClick={collapseAllGroups} variant="outline" size="sm">
-          Collapse All Groups
-        </Button>
         <Button onClick={clearConsoleLogs} variant="ghost" size="sm">
           <IconTrash size={16} />
         </Button>
@@ -55,9 +49,12 @@ const ConsoleOutput: React.FC = () => {
       )}
       {filteredMessages.map((entry, index) => {
         if (entry.type === 'groupEnd') return null;
-        if (index > 0 && isGroupCollapsed(index)) return null;
 
-        // Adjusted indentation: 10px per group depth
+        const collapsedDepth = isInsideCollapsedGroup(index);
+        if (collapsedDepth > 0 && entry.type !== 'group') {
+          return null;
+        }
+
         const indent = entry.groupDepth * 10;
 
         return (
@@ -67,23 +64,30 @@ const ConsoleOutput: React.FC = () => {
                 <table className="border-collapse border border-gray-300 w-full">
                   <thead>
                     <tr>
-                      {entry.message.headers.map((header, i) => (
-                        <th key={i} className="border border-gray-300 p-1">
-                          {header}
-                        </th>
-                      ))}
+                      <th className="border border-gray-300 p-1">age</th>
+                      <th className="border border-gray-300 p-1">name</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {entry.message.rows.map((row, i) => (
-                      <tr key={i}>
-                        {row.map((cell, j) => (
-                          <td key={j} className="border border-gray-300 p-1">
-                            {String(cell)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                    {entry.message.rows.map((row, i) => {
+                      try {
+                        const obj = JSON.parse(row[1]); // Parse the stringified object from the 'Value' column
+                        return (
+                          <tr key={i}>
+                            <td className="border border-gray-300 p-1">{String(obj.age || 'N/A')}</td>
+                            <td className="border border-gray-300 p-1">{String(obj.name || 'N/A')}</td>
+                          </tr>
+                        );
+                      } catch (e) {
+                        return (
+                          <tr key={i}>
+                            <td colSpan={2} className="border border-gray-300 p-1 text-red-600">
+                              Invalid data
+                            </td>
+                          </tr>
+                        );
+                      }
+                    })}
                   </tbody>
                 </table>
               )}

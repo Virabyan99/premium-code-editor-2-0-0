@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useRef, useEffect } from 'react'
-import CodeEditor from '@/components/CodeEditor'
-import ConsoleOutput from '@/components/ConsoleOutput'
-import ConnectionBanner from '@/components/ConnectionBanner'
-import { messageSchema } from '@/lib/messageSchemas'
-import { parse } from '@babel/parser'
-import { retry } from '@/lib/retry'
-import { useStore } from '@/lib/store'
-import { getSnippets, getConsoleLogs, saveConsoleLog, db } from '@/lib/db'
-import { debounce } from 'lodash'
+import { useRef, useEffect } from 'react';
+import CodeEditor from '@/components/CodeEditor';
+import ConsoleOutput from '@/components/ConsoleOutput';
+import ConnectionBanner from '@/components/ConnectionBanner';
+import { messageSchema } from '@/lib/messageSchemas';
+import { parse } from '@babel/parser';
+import { retry } from '@/lib/retry';
+import { useStore } from '@/lib/store';
+import { getSnippets, getConsoleLogs, saveConsoleLog, db } from '@/lib/db';
+import { debounce } from 'lodash';
 
 export default function Home() {
   const {
@@ -29,10 +29,10 @@ export default function Home() {
     setSnippets,
     shouldRunCode,
     setShouldRunCode,
-    clearConsoleLogs, // Added from store
-  } = useStore()
+    clearConsoleLogs,
+  } = useStore();
 
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -43,17 +43,22 @@ export default function Home() {
         savedLogs.map((log) => {
           try {
             const parsed = JSON.parse(log.message);
-            if (typeof parsed === 'object' && parsed.message && parsed.type) {
-              return parsed; // Valid ConsoleEntry with message and type
+            if (typeof parsed === 'object' && parsed.message !== undefined && parsed.type) {
+              return {
+                id: log.timestamp,
+                message: parsed.message,
+                type: parsed.type,
+                groupDepth: parsed.groupDepth || 0, // Preserve original groupDepth
+              };
             } else {
-              // JSON parsed successfully but lacks required properties
-              return { message: log.message, type: 'log' };
+              // Treat non-conforming logs as plain text logs
+              return { id: log.timestamp, message: String(log.message), type: 'log', groupDepth: 0 };
             }
           } catch {
-            // JSON parsing failed (e.g., plain string or invalid JSON)
-            return { message: log.message, type: 'log' };
+            // If parsing fails, use the raw message as a log
+            return { id: log.timestamp, message: String(log.message), type: 'log', groupDepth: 0 };
           }
-        })
+        }).filter(entry => entry.type !== 'groupEnd') // Optionally filter out groupEnd to reduce clutter
       );
       if (savedSnippets.length > 0) {
         setCode(savedSnippets[0].code);
@@ -63,105 +68,105 @@ export default function Home() {
   }, [setSnippets, setConsoleMessages, setCode]);
 
   const autoSave = debounce(async (code: string) => {
-    const updatedSnippets = await getSnippets()
-    const autoSavedExists = updatedSnippets.some(s => s.name === 'Auto-Saved')
+    const updatedSnippets = await getSnippets();
+    const autoSavedExists = updatedSnippets.some((s) => s.name === 'Auto-Saved');
     if (!autoSavedExists && code.trim()) {
-      await db.snippets.add({ code, name: 'Auto-Saved', createdAt: Date.now() })
+      await db.snippets.add({ code, name: 'Auto-Saved', createdAt: Date.now() });
     } else if (autoSavedExists && code.trim()) {
-      const autoSavedSnippet = updatedSnippets.find(s => s.name === 'Auto-Saved')
+      const autoSavedSnippet = updatedSnippets.find((s) => s.name === 'Auto-Saved');
       if (autoSavedSnippet) {
-        await db.snippets.update(autoSavedSnippet.id!, { code, createdAt: Date.now() })
+        await db.snippets.update(autoSavedSnippet.id!, { code, createdAt: Date.now() });
       }
     }
-    const refreshedSnippets = await getSnippets()
-    setSnippets(refreshedSnippets)
-  }, 5000)
+    const refreshedSnippets = await getSnippets();
+    setSnippets(refreshedSnippets);
+  }, 5000);
 
   useEffect(() => {
-    autoSave(code)
-    return () => autoSave.cancel()
-  }, [code])
+    autoSave(code);
+    return () => autoSave.cancel();
+  }, [code]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       try {
-        const message = messageSchema.parse(event.data)
+        const message = messageSchema.parse(event.data);
         if (message.type === 'console') {
-          const msg = { message: message.payload, type: message.method }
-          addConsoleMessage(msg)
-          saveConsoleLog(JSON.stringify(msg))
+          addConsoleMessage(message.payload, message.method, message.groupDepth);
+          if (message.method === 'clear') {
+            setConsoleMessages([]);
+          }
+          saveConsoleLog(JSON.stringify({ message: message.payload, type: message.method, groupDepth: message.groupDepth }));
         } else if (message.type === 'result') {
-          const msg = { message: message.value, type: 'result' }
-          addConsoleMessage(msg)
-          saveConsoleLog(JSON.stringify(msg))
+          addConsoleMessage(message.value, 'result', 0);
+          saveConsoleLog(JSON.stringify({ message: message.value, type: 'result', groupDepth: 0 }));
         } else if (message.type === 'error') {
-          const msg = { message: `${message.message}\n${message.stack || ''}`, type: 'error' }
-          addConsoleMessage(msg)
-          saveConsoleLog(JSON.stringify(msg))
+          const errorMsg = `${message.message}\n${message.stack || ''}`;
+          addConsoleMessage(errorMsg, 'error', 0);
+          saveConsoleLog(JSON.stringify({ message: errorMsg, type: 'error', groupDepth: 0 }));
         } else if (message.type === 'schemaError') {
-          const msg = { message: `Schema Error: ${message.issues}`, type: 'error' }
-          addConsoleMessage(msg)
-          saveConsoleLog(JSON.stringify(msg))
+          addConsoleMessage(`Schema Error: ${message.issues}`, 'error', 0);
+          saveConsoleLog(JSON.stringify({ message: `Schema Error: ${message.issues}`, type: 'error', groupDepth: 0 }));
         }
       } catch (error) {
-        const msg = { message: `Error: ${error instanceof Error ? error.message : String(error)}`, type: 'error' }
-        addConsoleMessage(msg)
-        saveConsoleLog(JSON.stringify(msg))
+        const msg = `Validation Error: ${error instanceof Error ? error.message : String(error)}`;
+        addConsoleMessage(msg, 'error', 0);
+        saveConsoleLog(JSON.stringify({ message: msg, type: 'error', groupDepth: 0 }));
       }
-    }
+    };
 
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [addConsoleMessage])
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [addConsoleMessage, setConsoleMessages]);
 
   const runCode = () => {
-    const iframe = iframeRef.current
+    const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       try {
-        parse(code, { sourceType: 'module', errorRecovery: true })
-        setConsoleMessages([])
+        parse(code, { sourceType: 'module', errorRecovery: true });
+        setConsoleMessages([]);
         retry(() => {
           return new Promise((resolve) => {
-            iframe.contentWindow!.postMessage({ type: 'run', code }, '*')
-            setTimeout(() => resolve(true), 100)
-          })
+            iframe.contentWindow!.postMessage({ type: 'run', code }, '*');
+            setTimeout(() => resolve(true), 100);
+          });
         })
           .then(() => {
-            setIsConnected(true)
-            setConnectionError(null)
-            resetFailedAttempts()
+            setIsConnected(true);
+            setConnectionError(null);
+            resetFailedAttempts();
           })
           .catch((error) => {
-            setIsConnected(false)
-            setConnectionError(error.message)
-            incrementFailedAttempts()
-            addConsoleMessage({ message: `Connection Error: ${error.message}`, type: 'error' })
-            saveConsoleLog(JSON.stringify({ message: `Connection Error: ${error.message}`, type: 'error' }))
-          })
+            setIsConnected(false);
+            setConnectionError(error.message);
+            incrementFailedAttempts();
+            addConsoleMessage(error.message, 'error', 0);
+            saveConsoleLog(JSON.stringify({ message: `Connection Error: ${error.message}`, type: 'error', groupDepth: 0 }));
+          });
       } catch (error) {
-        const msg = { message: `Syntax Error: ${error instanceof Error ? error.message : String(error)}`, type: 'error' }
-        addConsoleMessage(msg)
-        saveConsoleLog(JSON.stringify(msg))
+        const msg = `Syntax Error: ${error instanceof Error ? error.message : String(error)}`;
+        addConsoleMessage(msg, 'error', 0);
+        saveConsoleLog(JSON.stringify({ message: msg, type: 'error', groupDepth: 0 }));
       }
     }
-  }
+  };
 
   useEffect(() => {
     if (shouldRunCode) {
-      runCode()
-      setShouldRunCode(false)
+      runCode();
+      setShouldRunCode(false);
     }
-  }, [shouldRunCode, runCode, setShouldRunCode])
+  }, [shouldRunCode]);
 
   const reconnect = () => {
     if (iframeRef.current) {
-      iframeRef.current.src = '/sandbox.html'
-      setIsConnected(true)
-      setConnectionError(null)
-      resetFailedAttempts()
-      setTimeout(() => runCode(), 500)
+      iframeRef.current.src = '/sandbox.html';
+      setIsConnected(true);
+      setConnectionError(null);
+      resetFailedAttempts();
+      setTimeout(() => runCode(), 500);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col h-screen">
@@ -193,5 +198,5 @@ export default function Home() {
         title="Code Sandbox"
       />
     </div>
-  )
+  );
 }

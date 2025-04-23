@@ -41,14 +41,15 @@ export default function Home() {
       setConsoleMessages(
         savedLogs.map((log) => {
           try {
-            // Attempt to parse log.message as JSON
             const parsed = JSON.parse(log.message);
-            // Check if parsed result is an object with message and type
             if (typeof parsed === 'object' && parsed.message && parsed.type) {
-              return parsed; // Return the parsed object (new format)
+              return parsed; // Valid ConsoleEntry with message and type
+            } else {
+              // JSON parsed successfully but lacks required properties
+              return { message: log.message, type: 'log' };
             }
           } catch {
-            // If parsing fails, treat it as a plain string with default type 'log'
+            // JSON parsing failed (e.g., plain string or invalid JSON)
             return { message: log.message, type: 'log' };
           }
         })
@@ -87,7 +88,7 @@ export default function Home() {
         if (message.type === 'console') {
           const msg = { message: message.payload, type: message.method }
           addConsoleMessage(msg)
-          saveConsoleLog(JSON.stringify(msg)) // Store as JSON to preserve type
+          saveConsoleLog(JSON.stringify(msg))
         } else if (message.type === 'result') {
           const msg = { message: message.value, type: 'result' }
           addConsoleMessage(msg)

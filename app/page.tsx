@@ -50,16 +50,26 @@ export default function Home() {
             const parsed = JSON.parse(log.message);
             if (typeof parsed === 'object' && parsed.message !== undefined && parsed.type) {
               return {
-                id: log.timestamp,
+                id: String(log.timestamp), // Convert number to string
                 message: parsed.message,
                 type: parsed.type,
                 groupDepth: parsed.groupDepth || 0,
               };
             } else {
-              return { id: log.timestamp, message: String(log.message), type: 'log', groupDepth: 0 };
+              return {
+                id: String(log.timestamp), // Convert number to string
+                message: String(log.message),
+                type: 'log',
+                groupDepth: 0,
+              };
             }
           } catch {
-            return { id: log.timestamp, message: String(log.message), type: 'log', groupDepth: 0 };
+            return {
+              id: String(log.timestamp), // Convert number to string
+              message: String(log.message),
+              type: 'log',
+              groupDepth: 0,
+            };
           }
         }).filter(entry => entry.type !== 'groupEnd')
       );

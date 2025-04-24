@@ -9,7 +9,7 @@ interface Snippet {
 }
 
 export interface ConsoleEntry {
-  id: number;
+  id: string; // Changed to string for unique IDs
   message:
     | string
     | { headers: string[]; rows: any[][] }
@@ -50,7 +50,7 @@ interface State {
   snippets: Snippet[];
   snippetName: string;
   shouldRunCode: boolean;
-  collapsedGroups: Set<number>;
+  collapsedGroups: Set<string>; // Changed to Set<string>
   timers: Map<string, { type: 'timeout' | 'interval'; id: string }>;
   dialogs: Dialog[];
 }
@@ -75,12 +75,14 @@ interface Actions {
   clearConsoleLogs: () => Promise<void>;
   deleteSnippet: (id: number) => Promise<void>;
   setShouldRunCode: (value: boolean) => void;
-  toggleGroupCollapse: (groupId: number) => void;
+  toggleGroupCollapse: (groupId: string) => void; // Changed to string
   addTimer: (id: string, type: 'timeout' | 'interval') => void;
   removeTimer: (id: string) => void;
   addDialog: (dialog: Dialog) => void;
   removeDialog: (id: string) => void;
 }
+
+let messageIdCounter = 0;
 
 export const useStore = create<State & Actions>((set) => ({
   code: `
@@ -104,12 +106,15 @@ export const useStore = create<State & Actions>((set) => ({
 
   setCode: (code) => set({ code }),
   addConsoleMessage: (message, type, groupDepth) =>
-    set((state) => ({
-      consoleMessages: [
-        ...state.consoleMessages,
-        { id: Date.now(), message, type, groupDepth },
-      ],
-    })),
+    set((state) => {
+      const id = `${Date.now()}-${messageIdCounter++}`;
+      return {
+        consoleMessages: [
+          ...state.consoleMessages,
+          { id, message, type, groupDepth },
+        ],
+      };
+    }),
   setConsoleMessages: (messages) => set({ consoleMessages: messages }),
   clearConsoleMessages: () => set({ consoleMessages: [], collapsedGroups: new Set() }),
   setIsConnected: (connected) => set({ isConnected: connected }),

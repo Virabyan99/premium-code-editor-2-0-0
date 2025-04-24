@@ -6,6 +6,7 @@ window.onload = function () {
     return;
   }
 
+  // **Zod Schemas for Message Validation**
   const runMessageSchema = z.object({
     type: z.literal('run'),
     code: z.string(),
@@ -29,6 +30,7 @@ window.onload = function () {
     dialogResponseMessageSchema,
   ]);
 
+  // **Utility Functions**
   function serializeArgs(args) {
     return args
       .map((arg) => {
@@ -100,9 +102,11 @@ window.onload = function () {
         });
         return { headers: ['(index)', ...subHeaders], rows };
       } else {
-        const headers = columns || ['Key', 'Value'];
+        const headers =
+
+ columns || ['Key', 'Value'];
         const rows = Object.entries(data).map(([key, value]) => [
-          key,
+          key,  // Fixed typo: 'waskey' to 'key'
           typeof value === 'object' ? JSON.stringify(value) : String(value),
         ]);
         return { headers, rows };
@@ -110,6 +114,7 @@ window.onload = function () {
     }
   }
 
+  // **State Management**
   let groupDepth = 0;
   const timers = new Map();
   const counters = new Map();
@@ -121,6 +126,7 @@ window.onload = function () {
   const timeoutCallbacks = new Map();
   const intervalCallbacks = new Map();
 
+  // **Custom Timer Functions**
   window.setTimeout = function (callback, delay, ...args) {
     const id = `timeout-${timeoutIdCounter++}`;
     timeoutCallbacks.set(id, callback);
@@ -145,6 +151,7 @@ window.onload = function () {
     intervalCallbacks.delete(id);
   };
 
+  // **Asynchronous Dialog Handling**
   function asyncDialog(dialogType, message, defaultValue) {
     const id = `dialog-${dialogIdCounter++}`;
     return new Promise((resolve, reject) => {
@@ -180,6 +187,7 @@ window.onload = function () {
     return asyncDialog('prompt', message, defaultValue);
   };
 
+  // **Console Overrides**
   const originalConsole = {
     log: console.log,
     warn: console.warn,
@@ -290,6 +298,15 @@ window.onload = function () {
     originalConsole.count(label);
   };
 
+  // **Step Counter from hooks.js**
+  const instrumentCode = window.hooks && window.hooks.instrumentCode
+    ? window.hooks.instrumentCode
+    : function (code) {
+        console.error('window.hooks.instrumentCode is not available; running code without instrumentation');
+        return `(async function() { ${code} })()`;
+      };
+
+  // **Message Event Listener**
   window.addEventListener('message', async (event) => {
     try {
       const message = messageSchema.parse(event.data);
@@ -303,9 +320,10 @@ window.onload = function () {
           } catch (error) {
             window.parent.postMessage(
               {
-                type: 'error',
-                message: error.message,
-                stack: error.stack || 'No stack trace',
+                type: 'console',
+                payload: error.message,
+                method: 'error',
+                groupDepth,
               },
               '*'
             );
@@ -313,13 +331,36 @@ window.onload = function () {
         }
       } else if (message.type === 'run') {
         try {
-          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-          const userFunction = new AsyncFunction(message.code);
+          const MAX_STEPS = 1000; // Set to 1000 as requested
+
+          // Instrument the user's code and wrap it with step counting logic
+          const instrumentedUserCode = instrumentCode(message.code);
+          const wrappedCode = `
+            let stepCount = 0;
+            const checkSteps = () => {
+              stepCount++;
+              if (stepCount > ${MAX_STEPS}) {
+                throw new Error('Potential infinite loop detected: exceeded ${MAX_STEPS} steps');
+              }
+            };
+            (async function() {
+              ${instrumentedUserCode}
+            })()
+          `;
+
+          const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+          const userFunction = new AsyncFunction(wrappedCode);
           const result = await userFunction();
+
           window.parent.postMessage({ type: 'result', value: String(result || '') }, '*');
         } catch (error) {
           window.parent.postMessage(
-            { type: 'error', message: error.message, stack: error.stack || 'No stack trace' },
+            {
+              type: 'console',
+              payload: error.message,
+              method: 'error',
+              groupDepth,
+            },
             '*'
           );
         }
@@ -332,7 +373,15 @@ window.onload = function () {
         }
       }
     } catch (error) {
-      window.parent.postMessage({ type: 'schemaError', issues: error.message }, '*');
+      window.parent.postMessage(
+        {
+          type: 'console',
+          payload: `Schema error: ${error.message}`,
+          method: 'error',
+          groupDepth,
+        },
+        '*'
+      );
     }
   });
 };

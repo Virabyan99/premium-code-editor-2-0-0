@@ -4,7 +4,7 @@ import { IconTrash, IconCopy } from '@tabler/icons-react';
 import { useStore } from '@/lib/store';
 
 const ConsoleOutput = () => {
-  const { consoleMessages, collapsedGroups, toggleGroupCollapse, clearConsoleLogs } = useStore();
+  const { consoleMessages, collapsedGroups, toggleGroupCollapse, clearConsoleLogs, timers } = useStore();
   const consoleRef = useRef(null);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
 
@@ -39,10 +39,24 @@ const ConsoleOutput = () => {
 
   return (
     <div ref={consoleRef} className="relative h-full p-2 bg-gray-100 dark:bg-gray-800 border rounded overflow-auto">
-      <div className="flex justify-end items-center mb-2">
-        <Button onClick={clearConsoleLogs} variant="ghost" size="sm">
-          <IconTrash size={16} />
-        </Button>
+      <div className="flex justify-between items-center mb-2">
+        <span className="p-1 bg-gray-300 dark:bg-gray-600 text-black dark:text-white rounded">
+          Active Timers: {timers.size}
+        </span>
+        <div className="flex items-center space-x-2">
+          <label className="flex items-center space-x-1">
+            <input
+              type="checkbox"
+              checked={showErrorsOnly}
+              onChange={(e) => setShowErrorsOnly(e.target.checked)}
+              className="form-checkbox"
+            />
+            <span>Errors Only</span>
+          </label>
+          <Button onClick={clearConsoleLogs} variant="ghost" size="sm">
+            <IconTrash size={16} />
+          </Button>
+        </div>
       </div>
       {filteredMessages.length === 0 && (
         <p className="text-gray-500 dark:text-gray-400">Console output will appear here...</p>

@@ -30,9 +30,12 @@ export default function Home() {
     shouldRunCode,
     setShouldRunCode,
     clearConsoleLogs,
+    addTimer,
+    removeTimer,
   } = useStore();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const timers = useRef(new Map());
 
   useEffect(() => {
     const loadData = async () => {
@@ -48,17 +51,15 @@ export default function Home() {
                 id: log.timestamp,
                 message: parsed.message,
                 type: parsed.type,
-                groupDepth: parsed.groupDepth || 0, // Preserve original groupDepth
+                groupDepth: parsed.groupDepth || 0,
               };
             } else {
-              // Treat non-conforming logs as plain text logs
               return { id: log.timestamp, message: String(log.message), type: 'log', groupDepth: 0 };
             }
           } catch {
-            // If parsing fails, use the raw message as a log
             return { id: log.timestamp, message: String(log.message), type: 'log', groupDepth: 0 };
           }
-        }).filter(entry => entry.type !== 'groupEnd') // Optionally filter out groupEnd to reduce clutter
+        }).filter(entry => entry.type !== 'groupEnd')
       );
       if (savedSnippets.length > 0) {
         setCode(savedSnippets[0].code);
@@ -107,6 +108,39 @@ export default function Home() {
         } else if (message.type === 'schemaError') {
           addConsoleMessage(`Schema Error: ${message.issues}`, 'error', 0);
           saveConsoleLog(JSON.stringify({ message: `Schema Error: ${message.issues}`, type: 'error', groupDepth: 0 }));
+        } else if (message.type === 'setTimeout') {
+          const timerId = setTimeout(() => {
+            iframeRef.current?.contentWindow?.postMessage(
+              { type: 'timerCallback', id: message.id, args: message.args },
+              '*'
+            );
+            removeTimer(message.id);
+          }, message.delay);
+          timers.current.set(message.id, timerId);
+          addTimer(message.id, 'timeout');
+        } else if (message.type === 'clearTimeout') {
+          const timerId = timers.current.get(message.id);
+          if (timerId !== undefined) {
+            clearTimeout(timerId);
+            timers.current.delete(message.id);
+            removeTimer(message.id);
+          }
+        } else if (message.type === 'setInterval') {
+          const intervalId = setInterval(() => {
+            iframeRef.current?.contentWindow?.postMessage(
+              { type: 'timerCallback', id: message.id, args: message.args },
+              '*'
+            );
+          }, message.delay);
+          timers.current.set(message.id, intervalId);
+          addTimer(message.id, 'interval');
+        } else if (message.type === 'clearInterval') {
+          const intervalId = timers.current.get(message.id);
+          if (intervalId !== undefined) {
+            clearInterval(intervalId);
+            timers.current.delete(message.id);
+            removeTimer(message.id);
+          }
         }
       } catch (error) {
         const msg = `Validation Error: ${error instanceof Error ? error.message : String(error)}`;
@@ -117,7 +151,7 @@ export default function Home() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [addConsoleMessage, setConsoleMessages]);
+  }, [addConsoleMessage, setConsoleMessages, addTimer, removeTimer]);
 
   const runCode = () => {
     const iframe = iframeRef.current;
@@ -164,6 +198,9 @@ export default function Home() {
       setIsConnected(true);
       setConnectionError(null);
       resetFailedAttempts();
+      timers.current.forEach((timerId) => clearTimeout(timerId));
+      timers.current = new Map();
+      useStore.setState({ timers: new Map() });
       setTimeout(() => runCode(), 500);
     }
   };

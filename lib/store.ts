@@ -44,6 +44,7 @@ interface State {
   snippetName: string;
   shouldRunCode: boolean;
   collapsedGroups: Set<number>;
+  timers: Map<string, { type: 'timeout' | 'interval'; id: string }>;
 }
 
 interface Actions {
@@ -67,10 +68,18 @@ interface Actions {
   deleteSnippet: (id: number) => Promise<void>;
   setShouldRunCode: (value: boolean) => void;
   toggleGroupCollapse: (groupId: number) => void;
+  addTimer: (id: string, type: 'timeout' | 'interval') => void;
+  removeTimer: (id: string) => void;
 }
 
 export const useStore = create<State & Actions>((set) => ({
-  code: '// Write your JavaScript here',
+  code: `
+    function updateClock() {
+      console.clear();
+      console.log("Current Time: " + new Date().toLocaleTimeString());
+    }
+    setInterval(updateClock, 1000);
+  `,
   consoleMessages: [],
   isConnected: true,
   connectionError: null,
@@ -79,6 +88,7 @@ export const useStore = create<State & Actions>((set) => ({
   snippetName: '',
   shouldRunCode: false,
   collapsedGroups: new Set(),
+  timers: new Map(),
 
   setCode: (code) => set({ code }),
   addConsoleMessage: (message, type, groupDepth) =>
@@ -106,6 +116,18 @@ export const useStore = create<State & Actions>((set) => ({
         newCollapsed.add(groupId);
       }
       return { collapsedGroups: newCollapsed };
+    }),
+  addTimer: (id, type) =>
+    set((state) => {
+      const newTimers = new Map(state.timers);
+      newTimers.set(id, { type, id });
+      return { timers: newTimers };
+    }),
+  removeTimer: (id) =>
+    set((state) => {
+      const newTimers = new Map(state.timers);
+      newTimers.delete(id);
+      return { timers: newTimers };
     }),
 
   saveSnippet: async (code, name) => {

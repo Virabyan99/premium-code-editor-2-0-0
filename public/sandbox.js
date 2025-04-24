@@ -6,12 +6,20 @@ window.onload = function () {
     return;
   }
 
+  // Define schemas for messages the iframe expects to receive
   const runMessageSchema = z.object({
     type: z.literal('run'),
     code: z.string(),
   });
 
-  const messageSchema = z.union([runMessageSchema]);
+  const timerCallbackMessageSchema = z.object({
+    type: z.literal('timerCallback'),
+    id: z.string(),
+    args: z.array(z.any()),
+  });
+
+  // Union schema for all possible messages the iframe can receive
+  const messageSchema = z.union([runMessageSchema, timerCallbackMessageSchema]);
 
   // Utility to serialize console arguments
   function serializeArgs(args) {
@@ -38,7 +46,6 @@ window.onload = function () {
       }
 
       if (typeof data[0] === 'object' && !Array.isArray(data[0])) {
-        // Array of objects
         const allKeys = new Set();
         data.forEach((obj) => {
           if (obj && typeof obj === 'object') {
@@ -56,7 +63,6 @@ window.onload = function () {
         });
         return { headers: ['(index)', ...headers], rows };
       } else {
-        // Array of primitives or mixed types
         const headers = columns || ['Index', 'Value'];
         const rows = data.map((item, index) => [
           String(index),
@@ -65,14 +71,12 @@ window.onload = function () {
         return { headers, rows };
       }
     } else {
-      // Object
       const keys = Object.keys(data);
       if (keys.length === 0) {
         return { headers: [], rows: [] };
       }
 
       if (typeof data[keys[0]] === 'object' && !Array.isArray(data[keys[0]])) {
-        // Object of objects
         const allSubKeys = new Set();
         keys.forEach((key) => {
           if (data[key] && typeof data[key] === 'object') {
@@ -90,7 +94,6 @@ window.onload = function () {
         });
         return { headers: ['(index)', ...subHeaders], rows };
       } else {
-        // Object of primitives
         const headers = columns || ['Key', 'Value'];
         const rows = Object.entries(data).map(([key, value]) => [
           key,
@@ -105,6 +108,36 @@ window.onload = function () {
   let groupDepth = 0;
   const timers = new Map();
   const counters = new Map();
+
+  // Proxy timer methods
+  let timeoutIdCounter = 0;
+  let intervalIdCounter = 0;
+  const timeoutCallbacks = new Map();
+  const intervalCallbacks = new Map();
+
+  window.setTimeout = function (callback, delay, ...args) {
+    const id = `timeout-${timeoutIdCounter++}`;
+    timeoutCallbacks.set(id, callback);
+    window.parent.postMessage({ type: 'setTimeout', id, delay, args }, '*');
+    return id;
+  };
+
+  window.clearTimeout = function (id) {
+    window.parent.postMessage({ type: 'clearTimeout', id }, '*');
+    timeoutCallbacks.delete(id);
+  };
+
+  window.setInterval = function (callback, delay, ...args) {
+    const id = `interval-${intervalIdCounter++}`;
+    intervalCallbacks.set(id, callback);
+    window.parent.postMessage({ type: 'setInterval', id, delay, args }, '*');
+    return id;
+  };
+
+  window.clearInterval = function (id) {
+    window.parent.postMessage({ type: 'clearInterval', id }, '*');
+    intervalCallbacks.delete(id);
+  };
 
   // Override console methods
   const originalConsole = {
@@ -220,7 +253,25 @@ window.onload = function () {
   window.addEventListener('message', (event) => {
     try {
       const message = messageSchema.parse(event.data);
-      if (message.type === 'run') {
+      if (message.type === 'timerCallback') {
+        const callback = message.id.startsWith('timeout-')
+          ? timeoutCallbacks.get(message.id)
+          : intervalCallbacks.get(message.id);
+        if (callback) {
+          try {
+            callback(...message.args);
+          } catch (error) {
+            window.parent.postMessage(
+              {
+                type: 'error',
+                message: error.message,
+                stack: error.stack || 'No stack trace',
+              },
+              '*'
+            );
+          }
+        }
+      } else if (message.type === 'run') {
         try {
           const result = eval(message.code);
           window.parent.postMessage({ type: 'result', value: String(result || '') }, '*');

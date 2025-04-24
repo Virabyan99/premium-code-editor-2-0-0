@@ -28,13 +28,23 @@ export type ConsoleMessage = {
 export type SchemaErrorMessage = { type: 'schemaError'; issues: string };
 export type ResultMessage = { type: 'result'; value: string };
 export type ErrorMessage = { type: 'error'; message: string; stack?: string };
+export type SetTimeoutMessage = { type: 'setTimeout'; id: string; delay: number; args: any[] };
+export type ClearTimeoutMessage = { type: 'clearTimeout'; id: string };
+export type SetIntervalMessage = { type: 'setInterval'; id: string; delay: number; args: any[] };
+export type ClearIntervalMessage = { type: 'clearInterval'; id: string };
+export type TimerCallbackMessage = { type: 'timerCallback'; id: string; args: any[] };
 
 export type Message =
   | RunMessage
   | ConsoleMessage
   | SchemaErrorMessage
   | ResultMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | SetTimeoutMessage
+  | ClearTimeoutMessage
+  | SetIntervalMessage
+  | ClearIntervalMessage
+  | TimerCallbackMessage;
 
 const runMessageSchema = z.object({
   type: z.literal('run'),
@@ -84,10 +94,45 @@ const errorMessageSchema = z.object({
   stack: z.string().optional(),
 });
 
+const setTimeoutMessageSchema = z.object({
+  type: z.literal('setTimeout'),
+  id: z.string(),
+  delay: z.number(),
+  args: z.array(z.any()),
+});
+
+const clearTimeoutMessageSchema = z.object({
+  type: z.literal('clearTimeout'),
+  id: z.string(),
+});
+
+const setIntervalMessageSchema = z.object({
+  type: z.literal('setInterval'),
+  id: z.string(),
+  delay: z.number(),
+  args: z.array(z.any()),
+});
+
+const clearIntervalMessageSchema = z.object({
+  type: z.literal('clearInterval'),
+  id: z.string(),
+});
+
+const timerCallbackMessageSchema = z.object({
+  type: z.literal('timerCallback'),
+  id: z.string(),
+  args: z.array(z.any()),
+});
+
 export const messageSchema = z.union([
   runMessageSchema,
   consoleMessageSchema,
   schemaErrorMessageSchema,
   resultMessageSchema,
   errorMessageSchema,
+  setTimeoutMessageSchema,
+  clearTimeoutMessageSchema,
+  setIntervalMessageSchema,
+  clearIntervalMessageSchema,
+  timerCallbackMessageSchema,
 ]);

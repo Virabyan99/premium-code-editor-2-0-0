@@ -4,6 +4,7 @@ import { useRef, useEffect } from 'react';
 import CodeEditor from '@/components/CodeEditor';
 import ConsoleOutput from '@/components/ConsoleOutput';
 import ConnectionBanner from '@/components/ConnectionBanner';
+import ModalDialog from '@/components/ModalDialog';
 import { messageSchema } from '@/lib/messageSchemas';
 import { parse } from '@babel/parser';
 import { retry } from '@/lib/retry';
@@ -32,6 +33,7 @@ export default function Home() {
     clearConsoleLogs,
     addTimer,
     removeTimer,
+    addDialog,
   } = useStore();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -141,6 +143,13 @@ export default function Home() {
             timers.current.delete(message.id);
             removeTimer(message.id);
           }
+        } else if (message.type === 'dialogRequest') {
+          addDialog({
+            id: message.id,
+            dialogType: message.dialogType,
+            message: message.message,
+            defaultValue: message.defaultValue,
+          });
         }
       } catch (error) {
         const msg = `Validation Error: ${error instanceof Error ? error.message : String(error)}`;
@@ -151,7 +160,7 @@ export default function Home() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [addConsoleMessage, setConsoleMessages, addTimer, removeTimer]);
+  }, [addConsoleMessage, setConsoleMessages, addTimer, removeTimer, addDialog]);
 
   const runCode = () => {
     const iframe = iframeRef.current;
@@ -225,6 +234,7 @@ export default function Home() {
         </div>
         <div className="w-1/2 p-2">
           <ConsoleOutput messages={consoleMessages} onClear={clearConsoleLogs} />
+          <ModalDialog iframeRef={iframeRef} />
         </div>
       </div>
       <iframe

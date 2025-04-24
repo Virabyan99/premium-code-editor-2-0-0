@@ -6,7 +6,6 @@ window.onload = function () {
     return;
   }
 
-  // Define schemas for messages the iframe expects to receive
   const runMessageSchema = z.object({
     type: z.literal('run'),
     code: z.string(),
@@ -18,10 +17,18 @@ window.onload = function () {
     args: z.array(z.any()),
   });
 
-  // Union schema for all possible messages the iframe can receive
-  const messageSchema = z.union([runMessageSchema, timerCallbackMessageSchema]);
+  const dialogResponseMessageSchema = z.object({
+    type: z.literal('dialogResponse'),
+    id: z.string(),
+    value: z.union([z.string(), z.boolean(), z.null()]),
+  });
 
-  // Utility to serialize console arguments
+  const messageSchema = z.union([
+    runMessageSchema,
+    timerCallbackMessageSchema,
+    dialogResponseMessageSchema,
+  ]);
+
   function serializeArgs(args) {
     return args
       .map((arg) => {
@@ -34,7 +41,6 @@ window.onload = function () {
       .join(' ');
   }
 
-  // Utility to serialize table data dynamically
   function serializeTable(data, columns) {
     if (!data || typeof data !== 'object') {
       return { headers: ['Value'], rows: [[String(data)]] };
@@ -104,12 +110,12 @@ window.onload = function () {
     }
   }
 
-  // Track group depth, timers, and counters
   let groupDepth = 0;
   const timers = new Map();
   const counters = new Map();
+  const dialogPromises = new Map();
+  let dialogIdCounter = 0;
 
-  // Proxy timer methods
   let timeoutIdCounter = 0;
   let intervalIdCounter = 0;
   const timeoutCallbacks = new Map();
@@ -139,7 +145,41 @@ window.onload = function () {
     intervalCallbacks.delete(id);
   };
 
-  // Override console methods
+  function asyncDialog(dialogType, message, defaultValue) {
+    const id = `dialog-${dialogIdCounter++}`;
+    return new Promise((resolve, reject) => {
+      window.parent.postMessage(
+        {
+          type: 'dialogRequest',
+          dialogType,
+          message: String(message),
+          defaultValue: defaultValue ? String(defaultValue) : undefined,
+          id,
+        },
+        '*'
+      );
+      dialogPromises.set(id, { resolve, reject });
+      setTimeout(() => {
+        if (dialogPromises.has(id)) {
+          dialogPromises.delete(id);
+          reject(new Error(`Dialog ${dialogType} timed out after 30 seconds`));
+        }
+      }, 30000);
+    });
+  }
+
+  window.alert = function (message) {
+    return asyncDialog('alert', message).then(() => undefined);
+  };
+
+  window.confirm = function (message) {
+    return asyncDialog('confirm', message);
+  };
+
+  window.prompt = function (message, defaultValue = '') {
+    return asyncDialog('prompt', message, defaultValue);
+  };
+
   const originalConsole = {
     log: console.log,
     warn: console.warn,
@@ -250,7 +290,7 @@ window.onload = function () {
     originalConsole.count(label);
   };
 
-  window.addEventListener('message', (event) => {
+  window.addEventListener('message', async (event) => {
     try {
       const message = messageSchema.parse(event.data);
       if (message.type === 'timerCallback') {
@@ -273,10 +313,22 @@ window.onload = function () {
         }
       } else if (message.type === 'run') {
         try {
-          const result = eval(message.code);
+          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+          const userFunction = new AsyncFunction(message.code);
+          const result = await userFunction();
           window.parent.postMessage({ type: 'result', value: String(result || '') }, '*');
         } catch (error) {
-          window.parent.postMessage({ type: 'error', message: error.message, stack: error.stack }, '*');
+          window.parent.postMessage(
+            { type: 'error', message: error.message, stack: error.stack || 'No stack trace' },
+            '*'
+          );
+        }
+      } else if (message.type === 'dialogResponse') {
+        const { id, value } = message;
+        if (dialogPromises.has(id)) {
+          const { resolve } = dialogPromises.get(id);
+          dialogPromises.delete(id);
+          resolve(value);
         }
       }
     } catch (error) {

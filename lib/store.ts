@@ -34,6 +34,13 @@ export interface ConsoleEntry {
   groupDepth: number;
 }
 
+interface Dialog {
+  id: string;
+  dialogType: 'alert' | 'confirm' | 'prompt';
+  message: string;
+  defaultValue?: string;
+}
+
 interface State {
   code: string;
   consoleMessages: ConsoleEntry[];
@@ -45,6 +52,7 @@ interface State {
   shouldRunCode: boolean;
   collapsedGroups: Set<number>;
   timers: Map<string, { type: 'timeout' | 'interval'; id: string }>;
+  dialogs: Dialog[];
 }
 
 interface Actions {
@@ -70,15 +78,18 @@ interface Actions {
   toggleGroupCollapse: (groupId: number) => void;
   addTimer: (id: string, type: 'timeout' | 'interval') => void;
   removeTimer: (id: string) => void;
+  addDialog: (dialog: Dialog) => void;
+  removeDialog: (id: string) => void;
 }
 
 export const useStore = create<State & Actions>((set) => ({
   code: `
-    function updateClock() {
-      console.clear();
-      console.log("Current Time: " + new Date().toLocaleTimeString());
+    alert("Welcome!");
+    let ok = confirm("Proceed?");
+    if (ok) {
+      let name = prompt("Your name?");
+      console.log("Hello, " + name);
     }
-    setInterval(updateClock, 1000);
   `,
   consoleMessages: [],
   isConnected: true,
@@ -89,6 +100,7 @@ export const useStore = create<State & Actions>((set) => ({
   shouldRunCode: false,
   collapsedGroups: new Set(),
   timers: new Map(),
+  dialogs: [],
 
   setCode: (code) => set({ code }),
   addConsoleMessage: (message, type, groupDepth) =>
@@ -129,6 +141,14 @@ export const useStore = create<State & Actions>((set) => ({
       newTimers.delete(id);
       return { timers: newTimers };
     }),
+  addDialog: (dialog) =>
+    set((state) => ({
+      dialogs: [...state.dialogs, dialog],
+    })),
+  removeDialog: (id) =>
+    set((state) => ({
+      dialogs: state.dialogs.filter((d) => d.id !== id),
+    })),
 
   saveSnippet: async (code, name) => {
     await dbSaveSnippet(code, name);

@@ -33,6 +33,14 @@ export type ClearTimeoutMessage = { type: 'clearTimeout'; id: string };
 export type SetIntervalMessage = { type: 'setInterval'; id: string; delay: number; args: any[] };
 export type ClearIntervalMessage = { type: 'clearInterval'; id: string };
 export type TimerCallbackMessage = { type: 'timerCallback'; id: string; args: any[] };
+export type DialogRequestMessage = {
+  type: 'dialogRequest';
+  dialogType: 'alert' | 'confirm' | 'prompt';
+  message: string;
+  defaultValue?: string;
+  id: string;
+};
+export type DialogResponseMessage = { type: 'dialogResponse'; id: string; value: string | boolean | null };
 
 export type Message =
   | RunMessage
@@ -44,7 +52,9 @@ export type Message =
   | ClearTimeoutMessage
   | SetIntervalMessage
   | ClearIntervalMessage
-  | TimerCallbackMessage;
+  | TimerCallbackMessage
+  | DialogRequestMessage
+  | DialogResponseMessage;
 
 const runMessageSchema = z.object({
   type: z.literal('run'),
@@ -124,6 +134,20 @@ const timerCallbackMessageSchema = z.object({
   args: z.array(z.any()),
 });
 
+const dialogRequestMessageSchema = z.object({
+  type: z.literal('dialogRequest'),
+  dialogType: z.enum(['alert', 'confirm', 'prompt']),
+  message: z.string(),
+  defaultValue: z.string().optional(),
+  id: z.string(),
+});
+
+const dialogResponseMessageSchema = z.object({
+  type: z.literal('dialogResponse'),
+  id: z.string(),
+  value: z.union([z.string(), z.boolean(), z.null()]),
+});
+
 export const messageSchema = z.union([
   runMessageSchema,
   consoleMessageSchema,
@@ -135,4 +159,6 @@ export const messageSchema = z.union([
   setIntervalMessageSchema,
   clearIntervalMessageSchema,
   timerCallbackMessageSchema,
+  dialogRequestMessageSchema,
+  dialogResponseMessageSchema,
 ]);

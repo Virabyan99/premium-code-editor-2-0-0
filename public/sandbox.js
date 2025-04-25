@@ -1,4 +1,17 @@
 window.onload = function () {
+  // Prevent network access
+  window.fetch = function() {
+    throw new Error('Network access is disabled for security');
+  };
+  window.XMLHttpRequest = function() {
+    throw new Error('Network access is disabled for security');
+  };
+  // Prevent sandbox escape
+  if (window.top !== window) {
+    window.top = window;
+    window.parent = window;
+  }
+
   const z = window.Zod;
 
   if (!z) {
@@ -223,7 +236,7 @@ window.onload = function () {
 
   console.table = function (data, columns) {
     const tableData = serializeTable(data, columns);
-    window.parent.postMessage({ type: 'console', payload: tableData, method: 'table', groupDepth }, '*');
+    window.parent.postMessage({ type: 'console', payload, tableData, method: 'table', groupDepth }, '*');
     originalConsole.table(data, columns);
   };
 

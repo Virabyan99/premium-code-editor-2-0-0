@@ -273,7 +273,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-[90%]">
       <div className="flex flex-1 overflow-hidden">
         <div className="w-1/2 p-2">
           {failedAttempts >= 3 && (

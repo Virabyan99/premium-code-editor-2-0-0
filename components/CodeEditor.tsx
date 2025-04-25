@@ -110,7 +110,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
     }
   }, [value])
 
-  return <div ref={editorRef} className="h-full" />
+  return <div ref={editorRef} className="h-[88vh] " />
 }
 
 export default CodeEditor

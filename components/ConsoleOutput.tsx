@@ -38,7 +38,7 @@ const ConsoleOutput = () => {
   }, [filteredMessages]);
 
   return (
-    <div ref={consoleRef} className="relative h-full p-2 bg-gray-100 dark:bg-gray-800 border rounded overflow-auto">
+    <div ref={consoleRef} className="relative h-[88vh]  p-2 bg-gray-100 dark:bg-gray-800 border rounded overflow-auto">
       <div className="flex justify-between items-center mb-2">
         <span className="p-1 bg-gray-300 dark:bg-gray-600 text-black dark:text-white rounded">
           Active Timers: {timers.size}

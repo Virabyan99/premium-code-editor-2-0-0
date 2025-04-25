@@ -102,11 +102,9 @@ window.onload = function () {
         });
         return { headers: ['(index)', ...subHeaders], rows };
       } else {
-        const headers =
-
- columns || ['Key', 'Value'];
+        const headers = columns || ['Key', 'Value'];
         const rows = Object.entries(data).map(([key, value]) => [
-          key,  // Fixed typo: 'waskey' to 'key'
+          key,
           typeof value === 'object' ? JSON.stringify(value) : String(value),
         ]);
         return { headers, rows };
@@ -320,10 +318,9 @@ window.onload = function () {
           } catch (error) {
             window.parent.postMessage(
               {
-                type: 'console',
-                payload: error.message,
-                method: 'error',
-                groupDepth,
+                type: 'error',
+                message: error.message,
+                stack: error.stack || 'No stack trace',
               },
               '*'
             );
@@ -331,14 +328,20 @@ window.onload = function () {
         }
       } else if (message.type === 'run') {
         try {
-          const MAX_STEPS = 1000; // Set to 1000 as requested
+          const MAX_STEPS = 1000;
+          const startTime = Date.now();
 
-          // Instrument the user's code and wrap it with step counting logic
           const instrumentedUserCode = instrumentCode(message.code);
           const wrappedCode = `
             let stepCount = 0;
             const checkSteps = () => {
               stepCount++;
+              if (stepCount % 100 === 0) {
+                const elapsed = Date.now() - startTime;
+                if (elapsed > 2000) {
+                  console.log('Execution has been running for over 2 seconds');
+                }
+              }
               if (stepCount > ${MAX_STEPS}) {
                 throw new Error('Potential infinite loop detected: exceeded ${MAX_STEPS} steps');
               }
@@ -356,10 +359,9 @@ window.onload = function () {
         } catch (error) {
           window.parent.postMessage(
             {
-              type: 'console',
-              payload: error.message,
-              method: 'error',
-              groupDepth,
+              type: 'error',
+              message: error.message,
+              stack: error.stack || 'No stack trace',
             },
             '*'
           );
@@ -375,10 +377,8 @@ window.onload = function () {
     } catch (error) {
       window.parent.postMessage(
         {
-          type: 'console',
-          payload: `Schema error: ${error.message}`,
-          method: 'error',
-          groupDepth,
+          type: 'schemaError',
+          issues: error.message,
         },
         '*'
       );

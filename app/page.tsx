@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import CodeEditor from '@/components/CodeEditor';
 import ConsoleOutput from '@/components/ConsoleOutput';
 import ConnectionBanner from '@/components/ConnectionBanner';
@@ -11,6 +11,7 @@ import { retry } from '@/lib/retry';
 import { useStore } from '@/lib/store';
 import { getSnippets, getConsoleLogs, saveConsoleLog, db } from '@/lib/db';
 import { debounce } from 'lodash';
+import { Button } from '@/components/ui/button';
 
 export default function Home() {
   const {
@@ -38,6 +39,9 @@ export default function Home() {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timers = useRef(new Map());
+  const [isRunning, setIsRunning] = useState(false);
+  const [showStopButton, setShowStopButton] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -50,14 +54,14 @@ export default function Home() {
             const parsed = JSON.parse(log.message);
             if (typeof parsed === 'object' && parsed.message !== undefined && parsed.type) {
               return {
-                id: String(log.timestamp), // Convert number to string
+                id: String(log.timestamp),
                 message: parsed.message,
                 type: parsed.type,
                 groupDepth: parsed.groupDepth || 0,
               };
             } else {
               return {
-                id: String(log.timestamp), // Convert number to string
+                id: String(log.timestamp),
                 message: String(log.message),
                 type: 'log',
                 groupDepth: 0,
@@ -65,7 +69,7 @@ export default function Home() {
             }
           } catch {
             return {
-              id: String(log.timestamp), // Convert number to string
+              id: String(log.timestamp),
               message: String(log.message),
               type: 'log',
               groupDepth: 0,
@@ -101,6 +105,8 @@ export default function Home() {
   }, [code]);
 
   useEffect(() => {
+    const activeIntervals = () => Array.from(useStore.getState().timers.values()).filter(t => t.type === 'interval').length;
+
     const handleMessage = (event: MessageEvent) => {
       try {
         const message = messageSchema.parse(event.data);
@@ -110,13 +116,18 @@ export default function Home() {
             setConsoleMessages([]);
           }
           saveConsoleLog(JSON.stringify({ message: message.payload, type: message.method, groupDepth: message.groupDepth }));
-        } else if (message.type === 'result') {
-          addConsoleMessage(message.value, 'result', 0);
-          saveConsoleLog(JSON.stringify({ message: message.value, type: 'result', groupDepth: 0 }));
-        } else if (message.type === 'error') {
-          const errorMsg = `${message.message}\n${message.stack || ''}`;
-          addConsoleMessage(errorMsg, 'error', 0);
-          saveConsoleLog(JSON.stringify({ message: errorMsg, type: 'error', groupDepth: 0 }));
+        } else if (message.type === 'result' || message.type === 'error') {
+          if (message.type === 'result') {
+            addConsoleMessage(message.value, 'result', 0);
+            saveConsoleLog(JSON.stringify({ message: message.value, type: 'result', groupDepth: 0 }));
+          } else {
+            const errorMsg = `${message.message}\n${message.stack || ''}`;
+            addConsoleMessage(errorMsg, 'error', 0);
+            saveConsoleLog(JSON.stringify({ message: errorMsg, type: 'error', groupDepth: 0 }));
+          }
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          setIsRunning(false);
+          setShowStopButton(false);
         } else if (message.type === 'schemaError') {
           addConsoleMessage(`Schema Error: ${message.issues}`, 'error', 0);
           saveConsoleLog(JSON.stringify({ message: `Schema Error: ${message.issues}`, type: 'error', groupDepth: 0 }));
@@ -138,6 +149,11 @@ export default function Home() {
             removeTimer(message.id);
           }
         } else if (message.type === 'setInterval') {
+          if (activeIntervals() >= 10) {
+            addConsoleMessage('Maximum number of intervals (10) reached', 'error', 0);
+            saveConsoleLog(JSON.stringify({ message: 'Maximum number of intervals (10) reached', type: 'error', groupDepth: 0 }));
+            return;
+          }
           const intervalId = setInterval(() => {
             iframeRef.current?.contentWindow?.postMessage(
               { type: 'timerCallback', id: message.id, args: message.args },
@@ -178,6 +194,13 @@ export default function Home() {
       try {
         parse(code, { sourceType: 'module', errorRecovery: true });
         setConsoleMessages([]);
+        setIsRunning(true);
+        setShowStopButton(false);
+        timeoutRef.current = setTimeout(() => {
+          if (isRunning) {
+            setShowStopButton(true);
+          }
+        }, 2000);
         retry(() => {
           return new Promise((resolve) => {
             iframe.contentWindow!.postMessage({ type: 'run', code }, '*');
@@ -195,11 +218,17 @@ export default function Home() {
             incrementFailedAttempts();
             addConsoleMessage(error.message, 'error', 0);
             saveConsoleLog(JSON.stringify({ message: `Connection Error: ${error.message}`, type: 'error', groupDepth: 0 }));
+            setIsRunning(false);
+            setShowStopButton(false);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
           });
       } catch (error) {
         const msg = `Syntax Error: ${error instanceof Error ? error.message : String(error)}`;
         addConsoleMessage(msg, 'error', 0);
         saveConsoleLog(JSON.stringify({ message: msg, type: 'error', groupDepth: 0 }));
+        setIsRunning(false);
+        setShowStopButton(false);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
       }
     }
   };
@@ -210,6 +239,25 @@ export default function Home() {
       setShouldRunCode(false);
     }
   }, [shouldRunCode]);
+
+  const stopExecution = () => {
+    if (iframeRef.current) {
+      iframeRef.current.src = '/sandbox.html';
+      setIsRunning(false);
+      setShowStopButton(false);
+      addConsoleMessage('Execution stopped by user', 'error', 0);
+      saveConsoleLog(JSON.stringify({ message: 'Execution stopped by user', type: 'error', groupDepth: 0 }));
+      timers.current.forEach((timerId) => {
+        if (typeof timerId === 'number') {
+          clearTimeout(timerId);
+        } else {
+          clearInterval(timerId);
+        }
+      });
+      timers.current = new Map();
+      useStore.setState({ timers: new Map() });
+    }
+  };
 
   const reconnect = () => {
     if (iframeRef.current) {
@@ -243,6 +291,11 @@ export default function Home() {
           <CodeEditor value={code} onChange={setCode} />
         </div>
         <div className="w-1/2 p-2">
+          {showStopButton && (
+            <Button onClick={stopExecution} className="mb-2 bg-red-500 hover:bg-red-600 text-white">
+              Stop Execution
+            </Button>
+          )}
           <ConsoleOutput messages={consoleMessages} onClear={clearConsoleLogs} />
           <ModalDialog iframeRef={iframeRef} />
         </div>

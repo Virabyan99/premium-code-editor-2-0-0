@@ -56,7 +56,7 @@ export async function saveConsoleLog(message: string): Promise<number> {
 }
 
 export async function getConsoleLogs(): Promise<ConsoleLog[]> {
-  return db.consoleLogs.orderBy('timestamp').reverse().toArray()
+  return db.consoleLogs.orderBy('timestamp').toArray()
 }
 
 export async function clearConsoleLogs(): Promise<void> {

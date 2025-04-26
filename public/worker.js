@@ -338,28 +338,28 @@ self.addEventListener('message', async (event) => {
       }
     } else if (message.type === 'run') {
       try {
-        const MAX_STEPS = 1000;
+        const MAX_STEPS = 10000;
         const startTime = Date.now();
 
         const instrumentedUserCode = instrumentCode(message.code);
         const wrappedCode = `
-          let stepCount = 0;
-          const checkSteps = () => {
-            stepCount++;
-            if (stepCount % 100 === 0) {
-              const elapsed = Date.now() - startTime;
-              if (elapsed > 2000) {
-                console.log('Execution has been running for over 2 seconds');
-              }
-            }
-            if (stepCount > ${MAX_STEPS}) {
-              throw new Error('Potential infinite loop detected: exceeded ${MAX_STEPS} steps');
-            }
-          };
+        let stepCount = 0;
+        const MAX_STEPS = 1000;
+        const startTime = Date.now();
+        const checkSteps = () => {
+          stepCount++;
+          if (stepCount > MAX_STEPS) {
+            throw new Error('Potential infinite loop detected: exceeded ' + MAX_STEPS + ' steps');
+          }
+        };
+        try {
           (async function() {
             ${instrumentedUserCode}
           })()
-        `;
+        } catch (e) {
+          throw e;
+        }
+      `;
 
         const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
         const userFunction = new AsyncFunction(wrappedCode);

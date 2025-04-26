@@ -52,46 +52,46 @@ export default function Home() {
   }, []);
 
   // Load initial data
-  useEffect(() => {
-    const loadData = async () => {
-      const savedSnippets = await getSnippets();
-      setSnippets(savedSnippets);
-      const savedLogs = await getConsoleLogs();
-      setConsoleMessages(
-        savedLogs.map((log) => {
-          try {
-            const parsed = JSON.parse(log.message);
-            if (typeof parsed === 'object' && parsed.message !== undefined && parsed.type) {
-              return {
-                id: String(log.timestamp),
-                message: parsed.message,
-                type: parsed.type,
-                groupDepth: parsed.groupDepth || 0,
-              };
-            } else {
-              return {
-                id: String(log.timestamp),
-                message: String(log.message),
-                type: 'log',
-                groupDepth: 0,
-              };
-            }
-          } catch {
+useEffect(() => {
+  const loadData = async () => {
+    const savedSnippets = await getSnippets();
+    setSnippets(savedSnippets);
+    const savedLogs = await getConsoleLogs();
+    setConsoleMessages(
+      savedLogs.map((log, index) => {
+        try {
+          const parsed = JSON.parse(log.message);
+          if (typeof parsed === 'object' && parsed.message !== undefined && parsed.type) {
             return {
-              id: String(log.timestamp),
+              id: `${log.timestamp}-${index}`, // Unique ID using timestamp and index
+              message: parsed.message,
+              type: parsed.type,
+              groupDepth: parsed.groupDepth || 0,
+            };
+          } else {
+            return {
+              id: `${log.timestamp}-${index}`,
               message: String(log.message),
               type: 'log',
               groupDepth: 0,
             };
           }
-        }).filter(entry => entry.type !== 'groupEnd')
-      );
-      if (savedSnippets.length > 0) {
-        setCode(savedSnippets[0].code);
-      }
-    };
-    loadData();
-  }, [setSnippets, setConsoleMessages, setCode]);
+        } catch {
+          return {
+            id: `${log.timestamp}-${index}`,
+            message: String(log.message),
+            type: 'log',
+            groupDepth: 0,
+          };
+        }
+      }).filter(entry => entry.type !== 'groupEnd')
+    );
+    if (savedSnippets.length > 0) {
+      setCode(savedSnippets[0].code);
+    }
+  };
+  loadData();
+}, [setSnippets, setConsoleMessages, setCode]);
 
   const autoSave = debounce(async (code: string) => {
     const updatedSnippets = await getSnippets();

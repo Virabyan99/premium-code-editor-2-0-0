@@ -9,7 +9,7 @@ interface Snippet {
 }
 
 export interface ConsoleEntry {
-  id: string; // Changed to string for unique IDs
+  id: string;
   message:
     | string
     | { headers: string[]; rows: any[][] }
@@ -50,7 +50,7 @@ interface State {
   snippets: Snippet[];
   snippetName: string;
   shouldRunCode: boolean;
-  collapsedGroups: Set<string>; // Changed to Set<string>
+  collapsedGroups: Set<string>;
   timers: Map<string, { type: 'timeout' | 'interval'; id: string }>;
   dialogs: Dialog[];
 }
@@ -62,6 +62,7 @@ interface Actions {
     type: ConsoleEntry['type'],
     groupDepth: number
   ) => void;
+  flushConsoleMessages: () => void;
   setConsoleMessages: (messages: ConsoleEntry[]) => void;
   clearConsoleMessages: () => void;
   setIsConnected: (connected: boolean) => void;
@@ -75,7 +76,7 @@ interface Actions {
   clearConsoleLogs: () => Promise<void>;
   deleteSnippet: (id: number) => Promise<void>;
   setShouldRunCode: (value: boolean) => void;
-  toggleGroupCollapse: (groupId: string) => void; // Changed to string
+  toggleGroupCollapse: (groupId: string) => void;
   addTimer: (id: string, type: 'timeout' | 'interval') => void;
   removeTimer: (id: string) => void;
   addDialog: (dialog: Dialog) => void;
@@ -83,6 +84,23 @@ interface Actions {
 }
 
 let messageIdCounter = 0;
+let messageQueue: ConsoleEntry[] = [];
+let flushTimeout: NodeJS.Timeout | null = null;
+const MAX_CONSOLE_MESSAGES = 10000;
+
+const flushMessages = (set: any) => {
+  if (messageQueue.length > 0) {
+    set((state: State) => {
+      let newMessages = [...state.consoleMessages, ...messageQueue];
+      if (newMessages.length > MAX_CONSOLE_MESSAGES) {
+        newMessages = newMessages.slice(-MAX_CONSOLE_MESSAGES);
+      }
+      return { consoleMessages: newMessages };
+    });
+    messageQueue = [];
+  }
+  flushTimeout = null;
+};
 
 export const useStore = create<State & Actions>((set) => ({
   code: `
@@ -105,16 +123,14 @@ export const useStore = create<State & Actions>((set) => ({
   dialogs: [],
 
   setCode: (code) => set({ code }),
-  addConsoleMessage: (message, type, groupDepth) =>
-    set((state) => {
-      const id = `${Date.now()}-${messageIdCounter++}`;
-      return {
-        consoleMessages: [
-          ...state.consoleMessages,
-          { id, message, type, groupDepth },
-        ],
-      };
-    }),
+  addConsoleMessage: (message, type, groupDepth) => {
+    const id = `${messageIdCounter++}`; // Simple incrementing counter
+    messageQueue.push({ id, message, type, groupDepth });
+    if (!flushTimeout) {
+      flushTimeout = setTimeout(() => flushMessages(set), 100);
+    }
+  },
+  flushConsoleMessages: () => flushMessages(set),
   setConsoleMessages: (messages) => set({ consoleMessages: messages }),
   clearConsoleMessages: () => set({ consoleMessages: [], collapsedGroups: new Set() }),
   setIsConnected: (connected) => set({ isConnected: connected }),

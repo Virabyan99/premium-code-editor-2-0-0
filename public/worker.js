@@ -303,6 +303,20 @@ const instrumentCode = self.hooks && self.hooks.instrumentCode
       return `(async function() { ${code} })()`;
     };
 
+// Handle unhandled promise rejections (e.g., CORS-blocked fetch errors)
+self.addEventListener('unhandledrejection', (event) => {
+  const error = event.reason;
+  let message = error.message || 'Unhandled promise rejection';
+  if (error instanceof TypeError && message.includes('Failed to fetch')) {
+    message = 'Fetch request failed, possibly due to CORS restrictions.';
+  }
+  self.postMessage({
+    type: 'error',
+    message: message,
+    stack: error.stack || 'No stack trace',
+  });
+});
+
 // Message Event Listener
 self.addEventListener('message', async (event) => {
   try {

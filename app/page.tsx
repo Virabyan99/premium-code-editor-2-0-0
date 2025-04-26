@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import CodeEditor from '@/components/CodeEditor';
 import ConsoleOutput from '@/components/ConsoleOutput';
 import ConnectionBanner from '@/components/ConnectionBanner';
@@ -37,12 +37,21 @@ export default function Home() {
     addDialog,
   } = useStore();
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const workerRef = useRef<Worker | null>(null);
   const timers = useRef(new Map());
   const [isRunning, setIsRunning] = useState(false);
   const [showStopButton, setShowStopButton] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Initialize the worker
+  useEffect(() => {
+    workerRef.current = new Worker('/worker.js');
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, []);
+
+  // Load initial data
   useEffect(() => {
     const loadData = async () => {
       const savedSnippets = await getSnippets();
@@ -104,93 +113,90 @@ export default function Home() {
     return () => autoSave.cancel();
   }, [code]);
 
-  useEffect(() => {
-    const activeIntervals = () => Array.from(useStore.getState().timers.values()).filter(t => t.type === 'interval').length;
-
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        const message = messageSchema.parse(event.data);
-        if (message.type === 'console') {
-          addConsoleMessage(message.payload, message.method, message.groupDepth);
-          if (message.method === 'clear') {
-            setConsoleMessages([]);
-          }
-          saveConsoleLog(JSON.stringify({ message: message.payload, type: message.method, groupDepth: message.groupDepth }));
-        } else if (message.type === 'result' || message.type === 'error') {
-          if (message.type === 'result') {
-            addConsoleMessage(message.value, 'result', 0);
-            saveConsoleLog(JSON.stringify({ message: message.value, type: 'result', groupDepth: 0 }));
-          } else {
-            const errorMsg = `${message.message}\n${message.stack || ''}`;
-            addConsoleMessage(errorMsg, 'error', 0);
-            saveConsoleLog(JSON.stringify({ message: errorMsg, type: 'error', groupDepth: 0 }));
-          }
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          setIsRunning(false);
-          setShowStopButton(false);
-        } else if (message.type === 'schemaError') {
-          addConsoleMessage(`Schema Error: ${message.issues}`, 'error', 0);
-          saveConsoleLog(JSON.stringify({ message: `Schema Error: ${message.issues}`, type: 'error', groupDepth: 0 }));
-        } else if (message.type === 'setTimeout') {
-          const timerId = setTimeout(() => {
-            iframeRef.current?.contentWindow?.postMessage(
-              { type: 'timerCallback', id: message.id, args: message.args },
-              '*'
-            );
-            removeTimer(message.id);
-          }, message.delay);
-          timers.current.set(message.id, timerId);
-          addTimer(message.id, 'timeout');
-        } else if (message.type === 'clearTimeout') {
-          const timerId = timers.current.get(message.id);
-          if (timerId !== undefined) {
-            clearTimeout(timerId);
-            timers.current.delete(message.id);
-            removeTimer(message.id);
-          }
-        } else if (message.type === 'setInterval') {
-          if (activeIntervals() >= 10) {
-            addConsoleMessage('Maximum number of intervals (10) reached', 'error', 0);
-            saveConsoleLog(JSON.stringify({ message: 'Maximum number of intervals (10) reached', type: 'error', groupDepth: 0 }));
-            return;
-          }
-          const intervalId = setInterval(() => {
-            iframeRef.current?.contentWindow?.postMessage(
-              { type: 'timerCallback', id: message.id, args: message.args },
-              '*'
-            );
-          }, message.delay);
-          timers.current.set(message.id, intervalId);
-          addTimer(message.id, 'interval');
-        } else if (message.type === 'clearInterval') {
-          const intervalId = timers.current.get(message.id);
-          if (intervalId !== undefined) {
-            clearInterval(intervalId);
-            timers.current.delete(message.id);
-            removeTimer(message.id);
-          }
-        } else if (message.type === 'dialogRequest') {
-          addDialog({
-            id: message.id,
-            dialogType: message.dialogType,
-            message: message.message,
-            defaultValue: message.defaultValue,
-          });
+  const handleMessage = useCallback((event: MessageEvent) => {
+    try {
+      const message = messageSchema.parse(event.data);
+      if (message.type === 'console') {
+        addConsoleMessage(message.payload, message.method, message.groupDepth);
+        if (message.method === 'clear') {
+          setConsoleMessages([]);
         }
-      } catch (error) {
-        const msg = `Validation Error: ${error instanceof Error ? error.message : String(error)}`;
-        addConsoleMessage(msg, 'error', 0);
-        saveConsoleLog(JSON.stringify({ message: msg, type: 'error', groupDepth: 0 }));
+        saveConsoleLog(JSON.stringify({ message: message.payload, type: message.method, groupDepth: message.groupDepth }));
+      } else if (message.type === 'result' || message.type === 'error') {
+        if (message.type === 'result') {
+          addConsoleMessage(message.value, 'result', 0);
+          saveConsoleLog(JSON.stringify({ message: message.value, type: 'result', groupDepth: 0 }));
+        } else {
+          const errorMsg = `${message.message}\n${message.stack || ''}`;
+          addConsoleMessage(errorMsg, 'error', 0);
+          saveConsoleLog(JSON.stringify({ message: errorMsg, type: 'error', groupDepth: 0 }));
+        }
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setIsRunning(false);
+        setShowStopButton(false);
+      } else if (message.type === 'schemaError') {
+        addConsoleMessage(`Schema Error: ${message.issues}`, 'error', 0);
+        saveConsoleLog(JSON.stringify({ message: `Schema Error: ${message.issues}`, type: 'error', groupDepth: 0 }));
+      } else if (message.type === 'setTimeout') {
+        const timerId = setTimeout(() => {
+          workerRef.current?.postMessage(
+            { type: 'timerCallback', id: message.id, args: message.args }
+          );
+          removeTimer(message.id);
+        }, message.delay);
+        timers.current.set(message.id, timerId);
+        addTimer(message.id, 'timeout');
+      } else if (message.type === 'clearTimeout') {
+        const timerId = timers.current.get(message.id);
+        if (timerId !== undefined) {
+          clearTimeout(timerId);
+          timers.current.delete(message.id);
+          removeTimer(message.id);
+        }
+      } else if (message.type === 'setInterval') {
+        if (Array.from(timers.current.values()).filter(t => typeof t !== 'number').length >= 10) {
+          addConsoleMessage('Maximum number of intervals (10) reached', 'error', 0);
+          saveConsoleLog(JSON.stringify({ message: 'Maximum number of intervals (10) reached', type: 'error', groupDepth: 0 }));
+          return;
+        }
+        const intervalId = setInterval(() => {
+          workerRef.current?.postMessage(
+            { type: 'timerCallback', id: message.id, args: message.args }
+          );
+        }, message.delay);
+        timers.current.set(message.id, intervalId);
+        addTimer(message.id, 'interval');
+      } else if (message.type === 'clearInterval') {
+        const intervalId = timers.current.get(message.id);
+        if (intervalId !== undefined) {
+          clearInterval(intervalId);
+          timers.current.delete(message.id);
+          removeTimer(message.id);
+        }
+      } else if (message.type === 'dialogRequest') {
+        addDialog({
+          id: message.id,
+          dialogType: message.dialogType,
+          message: message.message,
+          defaultValue: message.defaultValue,
+        });
       }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    } catch (error) {
+      const msg = `Validation Error: ${error instanceof Error ? error.message : String(error)}`;
+      addConsoleMessage(msg, 'error', 0);
+      saveConsoleLog(JSON.stringify({ message: msg, type: 'error', groupDepth: 0 }));
+    }
   }, [addConsoleMessage, setConsoleMessages, addTimer, removeTimer, addDialog]);
 
+  // Set up worker message listener
+  useEffect(() => {
+    if (workerRef.current) {
+      workerRef.current.onmessage = handleMessage;
+    }
+  }, [handleMessage]);
+
   const runCode = () => {
-    const iframe = iframeRef.current;
-    if (iframe && iframe.contentWindow) {
+    if (workerRef.current) {
       try {
         parse(code, { sourceType: 'module', errorRecovery: true });
         setConsoleMessages([]);
@@ -203,7 +209,7 @@ export default function Home() {
         }, 2000);
         retry(() => {
           return new Promise((resolve) => {
-            iframe.contentWindow!.postMessage({ type: 'run', code }, '*');
+            workerRef.current?.postMessage({ type: 'run', code });
             setTimeout(() => resolve(true), 100);
           });
         })
@@ -241,12 +247,10 @@ export default function Home() {
   }, [shouldRunCode]);
 
   const stopExecution = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = '/sandbox.html';
-      setIsRunning(false);
-      setShowStopButton(false);
-      addConsoleMessage('Execution stopped by user', 'error', 0);
-      saveConsoleLog(JSON.stringify({ message: 'Execution stopped by user', type: 'error', groupDepth: 0 }));
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = new Worker('/worker.js');
+      workerRef.current.onmessage = handleMessage;
       timers.current.forEach((timerId) => {
         if (typeof timerId === 'number') {
           clearTimeout(timerId);
@@ -256,12 +260,18 @@ export default function Home() {
       });
       timers.current = new Map();
       useStore.setState({ timers: new Map() });
+      addConsoleMessage('Execution stopped by user', 'error', 0);
+      saveConsoleLog(JSON.stringify({ message: 'Execution stopped by user', type: 'error', groupDepth: 0 }));
+      setIsRunning(false);
+      setShowStopButton(false);
     }
   };
 
   const reconnect = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = '/sandbox.html';
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = new Worker('/worker.js');
+      workerRef.current.onmessage = handleMessage;
       setIsConnected(true);
       setConnectionError(null);
       resetFailedAttempts();
@@ -297,16 +307,9 @@ export default function Home() {
             </Button>
           )}
           <ConsoleOutput messages={consoleMessages} onClear={clearConsoleLogs} />
-          <ModalDialog iframeRef={iframeRef} />
+          <ModalDialog workerRef={workerRef} />
         </div>
       </div>
-      <iframe
-        ref={iframeRef}
-        sandbox="allow-scripts"
-        src="/sandbox.html"
-        style={{ display: 'none' }}
-        title="Code Sandbox"
-      />
     </div>
   );
 }

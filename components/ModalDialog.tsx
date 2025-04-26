@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
 
-const ModalDialog = ({ iframeRef }) => { // Add iframeRef as a prop
+const ModalDialog = ({ workerRef }) => {
   const { dialogs, removeDialog } = useStore();
   const [promptValue, setPromptValue] = useState('');
 
   const currentDialog = dialogs[0];
 
   const handleResponse = (value: string | boolean | null) => {
-    if (currentDialog && iframeRef.current) {
-      iframeRef.current.contentWindow.postMessage( // Send to iframe's contentWindow
-        { type: 'dialogResponse', id: currentDialog.id, value },
-        '*'
+    if (currentDialog && workerRef.current) {
+      workerRef.current.postMessage(
+        { type: 'dialogResponse', id: currentDialog.id, value }
       );
       removeDialog(currentDialog.id);
       setPromptValue('');

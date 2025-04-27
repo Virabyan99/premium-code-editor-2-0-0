@@ -59,7 +59,6 @@ export const pulseOnType = ViewPlugin.fromClass(
     }
     update(update: ViewUpdate) {
       if (update.docChanged) {
-        console.log("Pulse triggered");
         const cursors = this.view.dom.querySelectorAll(".cm-cursor");
         cursors.forEach((cursor) => {
           const htmlCursor = cursor as HTMLElement;

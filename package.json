@@ -16,10 +16,12 @@
     "@radix-ui/react-slot": "^1.2.0",
     "@tabler/icons-react": "^3.31.0",
     "acorn": "^8.14.1",
+    "acorn-walk": "^8.3.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.1",
     "dexie": "^4.0.11",
+    "escodegen": "^2.1.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.501.0",
     "next": "15.3.1",
@@ -38,6 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "webpack-cli": "^6.0.1"
   }
 }

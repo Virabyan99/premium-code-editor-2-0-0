@@ -1,36 +1,40 @@
+// public/hooks.js
+if (!self.hooks) {
+  self.hooks = {};
+}
+
 self.hooks.instrumentCode = function (code) {
-  importScripts('https://unpkg.com/@babel/parser@7.23.0/lib/index.js');
-  importScripts('https://unpkg.com/@babel/traverse@7.23.0/lib/index.js');
+  // Check if dependencies are loaded
+  if (!self.acorn || !self.acorn.walk || !self.escodegen) {
+    throw new Error('Acorn or Escodegen dependencies not loaded. Cannot instrument code.');
+  }
 
-  const { parse } = self.babelParser;
-  const traverse = self.babelTraverse.default;
+  // Parse the code into an AST
+  const ast = self.acorn.parse(code, { sourceType: 'module', ecmaVersion: 'latest' });
 
-  const ast = parse(code, { sourceType: 'module', errorRecovery: true });
-  traverse(ast, {
-    ForStatement(path) {
-      path.get('body').unshiftContainer('body', parse('checkSteps();').program.body[0]);
-    },
-    WhileStatement(path) {
-      path.get('body').unshiftContainer('body', parse('checkSteps();').program.body[0]);
-    },
-    DoWhileStatement(path) {
-      path.get('body').unshiftContainer('body', parse('checkSteps();').program.body[0]);
-    },
-    ForEachStatement(path) {
-      const node = path.node;
-      const array = node.object;
-      const param = node.left.name;
-      const body = node.body.body;
-      const forLoop = parse(`
-        for (let i = 0; i < ${array.name}.length; i++) {
-          checkSteps();
-          let ${param} = ${array.name}[i];
-          ${body.map((stmt) => stmt.source()).join('\n')}
-        }
-      `).program.body[0];
-      path.replaceWith(forLoop);
-    },
+  // Function to insert checkSteps() at the beginning of block statements
+  const insertCheckSteps = (node) => {
+    if (node.body && Array.isArray(node.body.body)) {
+      const checkStepsNode = self.acorn.parse('checkSteps();').body[0];
+      node.body.body.unshift(checkStepsNode);
+    } else if (node.body && node.body.type === 'ExpressionStatement') {
+      // Convert single expression to block with checkSteps()
+      const checkStepsNode = self.acorn.parse('checkSteps();').body[0];
+      node.body = {
+        type: 'BlockStatement',
+        body: [checkStepsNode, node.body],
+      };
+    }
+  };
+
+  // Walk the AST and instrument loops
+  self.acorn.walk.simple(ast, { // Use self.acorn.walk instead of self.acornWalk
+    ForStatement: insertCheckSteps,
+    WhileStatement: insertCheckSteps,
+    DoWhileStatement: insertCheckSteps,
   });
 
-  return ast.program.body.map((node) => node.source()).join('\n');
+  // Serialize the modified AST back to code
+  const instrumentedCode = self.escodegen.generate(ast);
+  return instrumentedCode;
 };

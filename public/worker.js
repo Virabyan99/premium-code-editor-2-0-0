@@ -1,5 +1,10 @@
-importScripts('https://cdn.jsdelivr.net/npm/zod@3.23.8/lib/index.umd.js');
-importScripts('/hooks.js');
+// worker.js
+try {
+  importScripts('https://cdn.jsdelivr.net/npm/zod@3.23.8/lib/index.umd.js');
+} catch (error) {
+  console.error('Failed to load scripts:', error);
+  self.postMessage({ type: 'error', message: 'Failed to load necessary scripts' });
+}
 
 const z = self.Zod;
 
@@ -295,15 +300,20 @@ console.count = function (label = 'default') {
   originalConsole.count(label);
 };
 
-// Step Counter from hooks.js
-const instrumentCode = self.hooks && self.hooks.instrumentCode
-  ? self.hooks.instrumentCode
-  : function (code) {
-      console.error('self.hooks.instrumentCode is not available; running code without instrumentation');
-      return `(async function() { ${code} })()`;
-    };
+// Custom Infinite Loop Detection
+function instrumentCode(code) {
+  // Regex to match loop constructs: for, while, do-while
+  const loopRegex = /(for\s*\(.*?\)\s*{|while\s*\(.*?\)\s*{|do\s*{)/g;
+  
+  // Insert checkSteps() after the opening brace of each loop
+  const instrumentedCode = code.replace(loopRegex, (match) => {
+    return match + 'checkSteps();';
+  });
+  
+  return instrumentedCode;
+}
 
-// Handle unhandled promise rejections (e.g., CORS-blocked fetch errors)
+// Handle unhandled promise rejections
 self.addEventListener('unhandledrejection', (event) => {
   const error = event.reason;
   let message = error.message || 'Unhandled promise rejection';
@@ -338,28 +348,27 @@ self.addEventListener('message', async (event) => {
       }
     } else if (message.type === 'run') {
       try {
-        const MAX_STEPS = 10000;
+        const MAX_STEPS = 1000;
         const startTime = Date.now();
 
         const instrumentedUserCode = instrumentCode(message.code);
         const wrappedCode = `
-        let stepCount = 0;
-        const MAX_STEPS = 1000;
-        const startTime = Date.now();
-        const checkSteps = () => {
-          stepCount++;
-          if (stepCount > MAX_STEPS) {
-            throw new Error('Potential infinite loop detected: exceeded ' + MAX_STEPS + ' steps');
+          let stepCount = 0;
+          const MAX_STEPS = ${MAX_STEPS};
+          const checkSteps = () => {
+            stepCount++;
+            if (stepCount > MAX_STEPS) {
+              throw new Error('Potential infinite loop detected: exceeded ' + MAX_STEPS + ' steps');
+            }
+          };
+          try {
+            (async function() {
+              ${instrumentedUserCode}
+            })()
+          } catch (e) {
+            throw e;
           }
-        };
-        try {
-          (async function() {
-            ${instrumentedUserCode}
-          })()
-        } catch (e) {
-          throw e;
-        }
-      `;
+        `;
 
         const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
         const userFunction = new AsyncFunction(wrappedCode);

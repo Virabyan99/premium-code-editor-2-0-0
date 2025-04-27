@@ -43,6 +43,8 @@ interface Dialog {
 
 interface State {
   code: string;
+  history: string[];
+  historyIndex: number;
   consoleMessages: ConsoleEntry[];
   isConnected: boolean;
   connectionError: string | null;
@@ -57,6 +59,9 @@ interface State {
 
 interface Actions {
   setCode: (code: string) => void;
+  addHistoryState: (code: string) => void;
+  undo: () => void;
+  redo: () => void;
   addConsoleMessage: (
     message: ConsoleEntry['message'],
     type: ConsoleEntry['type'],
@@ -102,7 +107,7 @@ const flushMessages = (set: any) => {
   flushTimeout = null;
 };
 
-export const useStore = create<State & Actions>((set) => ({
+export const useStore = create<State & Actions>((set, get) => ({
   code: `
     alert("Welcome!");
     let ok = confirm("Proceed?");
@@ -111,6 +116,8 @@ export const useStore = create<State & Actions>((set) => ({
       console.log("Hello, " + name);
     }
   `,
+  history: [],
+  historyIndex: -1,
   consoleMessages: [],
   isConnected: true,
   connectionError: null,
@@ -123,8 +130,28 @@ export const useStore = create<State & Actions>((set) => ({
   dialogs: [],
 
   setCode: (code) => set({ code }),
+  addHistoryState: (code) => {
+    const { history, historyIndex } = get();
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(code);
+    set({ history: newHistory, historyIndex: newHistory.length - 1 });
+  },
+  undo: () => {
+    const { history, historyIndex } = get();
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      set({ code: history[newIndex], historyIndex: newIndex });
+    }
+  },
+  redo: () => {
+    const { history, historyIndex } = get();
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      set({ code: history[newIndex], historyIndex: newIndex });
+    }
+  },
   addConsoleMessage: (message, type, groupDepth) => {
-    const id = `${messageIdCounter++}`; // Simple incrementing counter
+    const id = `${messageIdCounter++}`;
     messageQueue.push({ id, message, type, groupDepth });
     if (!flushTimeout) {
       flushTimeout = setTimeout(() => flushMessages(set), 100);

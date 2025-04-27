@@ -25,6 +25,8 @@ import {
   IconTrash,
   IconUpload,
   IconDownload,
+  IconArrowLeft,
+  IconArrowRight,
 } from '@tabler/icons-react'
 import { parse } from 'acorn'
 
@@ -39,6 +41,8 @@ export default function Toolbar() {
     saveSnippet,
     loadSnippet,
     deleteSnippet,
+    undo,
+    redo,
   } = useStore()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -113,6 +117,12 @@ export default function Toolbar() {
 
   return (
     <div className="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-gray-800 border-b">
+      <Button variant="ghost" size="icon" onClick={undo}>
+        <IconArrowLeft size={20} />
+      </Button>
+      <Button variant="ghost" size="icon" onClick={redo}>
+        <IconArrowRight size={20} />
+      </Button>
       <Button variant="ghost" size="icon" onClick={handleThemeToggle}>
         {theme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />}
       </Button>

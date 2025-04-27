@@ -7,8 +7,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, indentUnit } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
 import { keymap } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"; // Add history and historyKeymap
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { fadeInExtension, addFadeIn } from "@/lib/fadeInExtension";
+import { useStore } from '@/lib/store';
 
 const ExternalUpdate = Annotation.define<boolean>();
 
@@ -20,6 +21,7 @@ interface CodeEditorProps {
 const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const { addHistoryState } = useStore();
 
   const todoLinter = linter((view) => {
     const diagnostics = [];
@@ -59,8 +61,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
           indentUnit.of("  "),
           lintGutter(),
           todoLinter,
-          history(), // Add history extension
-          keymap.of([...defaultKeymap, ...historyKeymap]), // Combine defaultKeymap with historyKeymap
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.lineWrapping,
           fadeInExtension,
           EditorView.updateListener.of((update) => {
@@ -68,7 +70,15 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
               update.docChanged &&
               !update.transactions.some((tr) => tr.annotation(ExternalUpdate))
             ) {
-              onChange(update.state.doc.toString());
+              const newCode = update.state.doc.toString();
+              onChange(newCode);
+              const docLength = update.state.doc.length;
+              if (docLength > 0) {
+                const lastChar = update.state.doc.sliceString(docLength - 1, docLength);
+                if (lastChar === ' ' || lastChar === '\n') {
+                  addHistoryState(newCode);
+                }
+              }
             }
           }),
           EditorView.updateListener.of((update) => {
@@ -102,7 +112,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
         view.destroy();
       };
     }
-  }, [onChange]);
+  }, [onChange, addHistoryState]);
 
   useEffect(() => {
     if (viewRef.current) {

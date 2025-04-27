@@ -7,10 +7,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, indentUnit } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
 import { keymap } from "@codemirror/view";
-import { defaultKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"; // Add history and historyKeymap
 import { fadeInExtension, addFadeIn } from "@/lib/fadeInExtension";
 
-// Define an annotation to mark external updates
 const ExternalUpdate = Annotation.define<boolean>();
 
 interface CodeEditorProps {
@@ -22,7 +21,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
 
-  // Custom linter for // TODO: comments
   const todoLinter = linter((view) => {
     const diagnostics = [];
     const lines = view.state.doc.toString().split("\n");
@@ -39,7 +37,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
     return diagnostics;
   });
 
-  // Initialize the editor on mount
   useEffect(() => {
     if (editorRef.current && !viewRef.current) {
       const editorTheme = EditorView.theme({
@@ -62,11 +59,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
           indentUnit.of("  "),
           lintGutter(),
           todoLinter,
-          keymap.of(defaultKeymap),
+          history(), // Add history extension
+          keymap.of([...defaultKeymap, ...historyKeymap]), // Combine defaultKeymap with historyKeymap
           EditorView.lineWrapping,
           fadeInExtension,
           EditorView.updateListener.of((update) => {
-            // Only call onChange for user-initiated changes (no ExternalUpdate annotation)
             if (
               update.docChanged &&
               !update.transactions.some((tr) => tr.annotation(ExternalUpdate))
@@ -98,8 +95,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
       });
 
       viewRef.current = view;
-      // Focus the editor on mount to ensure key events are captured
       view.focus();
+      console.log("Editor focused on mount:", view.hasFocus);
 
       return () => {
         view.destroy();
@@ -107,20 +104,29 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
     }
   }, [onChange]);
 
-  // Sync editor content with value prop changes (e.g., loading a snippet)
   useEffect(() => {
     if (viewRef.current) {
       const currentCode = viewRef.current.state.doc.toString();
       if (currentCode !== value) {
         viewRef.current.dispatch({
           changes: { from: 0, to: currentCode.length, insert: value },
-          annotations: ExternalUpdate.of(true), // Mark as external update
+          annotations: ExternalUpdate.of(true),
         });
       }
     }
   }, [value]);
 
-  return <div ref={editorRef} className="h-[88vh]" />;
+  const handleClick = () => {
+    if (viewRef.current && !viewRef.current.hasFocus) {
+      viewRef.current.focus();
+    }
+  };
+
+  return (
+    <div onClick={handleClick}>
+      <div ref={editorRef} className="h-[88vh]" />
+    </div>
+  );
 };
 
 export default CodeEditor;

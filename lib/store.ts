@@ -109,12 +109,7 @@ const flushMessages = (set: any) => {
 
 export const useStore = create<State & Actions>((set, get) => ({
   code: `
-    alert("Welcome!");
-    let ok = confirm("Proceed?");
-    if (ok) {
-      let name = prompt("Your name?");
-      console.log("Hello, " + name);
-    }
+    
   `,
   history: [],
   historyIndex: -1,

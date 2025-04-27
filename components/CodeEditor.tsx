@@ -7,7 +7,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, indentUnit } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
 import { keymap } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap } from "@codemirror/commands";
 import { fadeInExtension, addFadeIn } from "@/lib/fadeInExtension";
 import { useStore } from '@/lib/store';
 
@@ -21,7 +21,7 @@ interface CodeEditorProps {
 const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const { addHistoryState } = useStore();
+  const { addHistoryState, undo, redo } = useStore();
 
   const todoLinter = linter((view) => {
     const diagnostics = [];
@@ -50,6 +50,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
         },
       });
 
+      const customKeymap = [
+        { key: "Mod-z", run: () => { undo(); return true; } },
+        { key: "Mod-y", run: () => { redo(); return true; } },
+        ...defaultKeymap,
+      ];
+
       const state = EditorState.create({
         doc: value,
         extensions: [
@@ -61,8 +67,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
           indentUnit.of("  "),
           lintGutter(),
           todoLinter,
-          history(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          keymap.of(customKeymap),
           EditorView.lineWrapping,
           fadeInExtension,
           EditorView.updateListener.of((update) => {
@@ -72,12 +77,15 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
             ) {
               const newCode = update.state.doc.toString();
               onChange(newCode);
-              const docLength = update.state.doc.length;
-              if (docLength > 0) {
-                const lastChar = update.state.doc.sliceString(docLength - 1, docLength);
-                if (lastChar === ' ' || lastChar === '\n') {
-                  addHistoryState(newCode);
+              let shouldAddHistory = false;
+              update.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+                const insertedText = update.state.doc.sliceString(fromB, toB);
+                if (insertedText.includes(' ') || insertedText.includes('\n')) {
+                  shouldAddHistory = true;
                 }
+              });
+              if (shouldAddHistory) {
+                addHistoryState(newCode);
               }
             }
           }),
@@ -106,13 +114,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange }) => {
 
       viewRef.current = view;
       view.focus();
-      console.log("Editor focused on mount:", view.hasFocus);
 
       return () => {
         view.destroy();
       };
     }
-  }, [onChange, addHistoryState]);
+  }, [onChange, addHistoryState, undo, redo]);
 
   useEffect(() => {
     if (viewRef.current) {
